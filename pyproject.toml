@@ -59,7 +59,7 @@ redis = {version = "^5.0.1", optional = true}
 # Development & Testing
 pytest = "^7.4.0"
 pytest-asyncio = "^0.21.0"
-pytest-cov = "^4.1.0"
+pytest-cov = "^6.3.0"
 black = "^24.3.0"
 isort = "^5.13.0"
 flake8 = "^6.1.0"
