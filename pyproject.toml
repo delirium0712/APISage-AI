@@ -46,7 +46,7 @@ numpy = "^1.24.0"
 httpx = "^0.27.0"
 
 # Logging
-structlog = "^24.1.0"
+structlog = "^25.4.0"
 watchdog = "^6.0.0"
 
 # Vector Database & Embeddings (optional for large API support)
