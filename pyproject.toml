@@ -53,7 +53,7 @@ watchdog = "^6.0.0"
 chromadb = {version = "^0.4.22", optional = true}
 sentence-transformers = {version = "^2.2.2", optional = true}
 tiktoken = "^0.5.2"
-redis = {version = "^5.0.1", optional = true}
+redis = {version = "^6.4.0", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 # Development & Testing
