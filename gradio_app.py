@@ -308,171 +308,216 @@ async def set_api_key(api_key):
         return f"❌ {error_msg}"
 
 def enhance_analysis_formatting(content):
-    """Enhance the visual formatting of API analysis results"""
+    """Rich, professional formatting with enhanced content density"""
     if not content or len(content.strip()) < 10:
         return content
     
-    # Enhanced formatting patterns
     enhanced_content = content
     
-    # 1. Format Overall Score with visual progress bar
+    # 1. Format Overall Score with rich visual elements
     overall_score_pattern = r'\*\*Overall Score:\*\* (\d+)/100'
     def format_overall_score(match):
         score = int(match.group(1))
+        status_emoji = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
+        status_text = "Excellent" if score >= 80 else "Good" if score >= 60 else "Needs Improvement"
+        
         # Create visual progress bar
-        progress_bars = "🟩" * (score // 10) + "🟨" * ((100-score) // 20) + "⬜" * max(0, 10 - (score // 10) - ((100-score) // 20))
-        color = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
-        return f"""
-## 📊 **Overall API Quality Score**
+        progress_blocks = "█" * (score // 10) + "░" * (10 - score // 10)
+        
+        # Add quality indicators
+        indicators = []
+        if score >= 90:
+            indicators = ["🏆 Premium Quality", "✨ Production Ready", "🎯 Best Practices"]
+        elif score >= 80:
+            indicators = ["✅ High Quality", "🚀 Well Designed", "📝 Good Documentation"]  
+        elif score >= 60:
+            indicators = ["⚠️ Adequate", "🔧 Needs Refinement", "📋 Some Issues"]
+        else:
+            indicators = ["❌ Poor Quality", "🚨 Major Issues", "⚡ Needs Work"]
 
-<div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 20px; border-radius: 12px; margin: 15px 0; border-left: 4px solid #3b82f6;">
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
-        <h3 style="margin: 0; color: #f1f5f9; font-size: 1.2em;">{color} Overall Score</h3>
-        <div style="font-size: 2em; font-weight: bold; color: #3b82f6;">{score}/100</div>
-    </div>
-    <div style="background: #0f172a; border-radius: 8px; padding: 8px; margin-bottom: 10px;">
-        <div style="font-family: monospace; font-size: 1.1em; letter-spacing: 1px;">{progress_bars}</div>
-    </div>
-    <div style="font-size: 0.9em; color: #94a3b8;">
-        {"🎉 Excellent API quality!" if score >= 80 else "✅ Good API quality" if score >= 60 else "⚠️ Needs improvement" if score >= 40 else "🚨 Major issues detected"}
-    </div>
-</div>
+        return f"""# 📊 API Quality Analysis Report
+
+## {status_emoji} Overall Score: {score}/100 - {status_text}
+
+**Visual Progress:** `{progress_blocks}` ({score}%)
+
+### Quality Indicators:
+{chr(10).join(f"• {indicator}" for indicator in indicators)}
+
+### Analysis Date: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+
+---
 """
     
     enhanced_content = re.sub(overall_score_pattern, format_overall_score, enhanced_content)
     
-    # 2. Format individual score breakdowns with icons and colors
+    # 2. Format detailed score breakdowns with rich details
     score_patterns = {
-        r'- \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_score_line(m.group(1), int(m.group(2)), m.group(3)),
-        r'• \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_score_line(m.group(1), int(m.group(2)), m.group(3)),
-        r'◦ \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_score_line(m.group(1), int(m.group(2)), m.group(3)),
-        r'(\w+): (\d+)/100 - ([^\n]+)': lambda m: format_score_line(m.group(1), int(m.group(2)), m.group(3)),
+        r'- \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_rich_score_item(m.group(1), int(m.group(2)), m.group(3)),
+        r'• \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_rich_score_item(m.group(1), int(m.group(2)), m.group(3)),
+        r'◦ \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_rich_score_item(m.group(1), int(m.group(2)), m.group(3)),
     }
     
-    def format_score_line(category, score, description):
+    def format_rich_score_item(category, score, description):
         icons = {
             "Completeness": "🔧", "Documentation": "📚", "Security": "🔒", 
             "Usability": "👥", "Standards": "📏", "Performance": "⚡",
-            "Compliance": "📏"  # For "Standards Compliance"
+            "Compliance": "📏"
+        }
+        
+        impact_levels = {
+            "Completeness": "Foundation",
+            "Documentation": "Developer Experience", 
+            "Security": "Trust & Safety",
+            "Usability": "Adoption",
+            "Standards": "Maintainability",
+            "Performance": "Scalability",
+            "Compliance": "Reliability"
         }
         
         icon = icons.get(category, "📊")
+        impact = impact_levels.get(category, "Quality")
         
-        # Color coding based on score
         if score >= 80:
-            color = "#10b981"  # Green
-            bg_color = "rgba(16, 185, 129, 0.1)"
-            status = "🟢"
+            status = "✅ Excellent"
+            grade = "A"
+            bar = "████████▓░"
         elif score >= 60:
-            color = "#f59e0b"  # Yellow
-            bg_color = "rgba(245, 158, 11, 0.1)"
-            status = "🟡"
-        elif score >= 40:
-            color = "#f97316"  # Orange  
-            bg_color = "rgba(249, 115, 22, 0.1)"
-            status = "🟠"
+            status = "⚠️ Good"
+            grade = "B" 
+            bar = "██████▓▓░░"
         else:
-            color = "#ef4444"  # Red
-            bg_color = "rgba(239, 68, 68, 0.1)"
-            status = "🔴"
-        
-        # Create mini progress bar
-        progress = "█" * (score // 10) + "░" * (10 - score // 10)
-        
+            status = "❌ Needs Work"
+            grade = "C"
+            bar = "████▓▓▓▓░░"
+            
         return f"""
-<div style="background: {bg_color}; border: 1px solid {color}; border-radius: 8px; padding: 12px; margin: 8px 0;">
-    <div style="display: flex; align-items: center; justify-content: space-between;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 1.2em;">{icon}</span>
-            <strong style="color: {color};">{category}</strong>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-family: monospace; font-size: 0.8em; color: {color};">{progress}</span>
-            <span style="font-weight: bold; color: {color};">{status} {score}/100</span>
-        </div>
-    </div>
-    <div style="margin-top: 8px; font-size: 0.9em; color: #64748b; line-height: 1.4;">
-        {description}
-    </div>
-</div>
+### {icon} {category}: {score}/100 {status} (Grade: {grade})
+
+**Impact Area:** {impact}  
+**Progress:** `{bar}` {score}%  
+**Analysis:** {description}
+
 """
     
     for pattern, formatter in score_patterns.items():
         enhanced_content = re.sub(pattern, formatter, enhanced_content)
     
-    # 2.5. Format Critical Issues section content specifically
-    # This needs to happen BEFORE general markdown formatting
-    def format_critical_issues_content(content):
-        # Format numbered issues with proper styling
+    # 3. Format critical issues with enhanced structure
+    def format_critical_issues(content):
+        # Format numbered critical issues
         issue_pattern = r'^(\d+\.\s+\*\*Issue:\*\*\s+.+)$'
-        def format_issue_item(match):
+        def format_numbered_issue(match):
             issue_text = match.group(1)
-            # Apply markdown formatting to the issue text
-            formatted_text = re.sub(r'\*\*([^*]+):\*\*', r'<strong style="color: #dc2626;">\1:</strong>', issue_text)
-            formatted_text = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', formatted_text)
-            return f'<div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05)); border-left: 4px solid #dc2626; padding: 12px; margin: 10px 0; border-radius: 0 8px 8px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">{formatted_text}</div>'
+            issue_number = re.match(r'^(\d+)\.', issue_text).group(1)
+            clean_text = re.sub(r'\d+\.\s+\*\*Issue:\*\*\s+', '', issue_text)
+            
+            priority_labels = ["🔥 Critical", "⚠️ High", "📋 Medium", "💡 Low"]
+            priority = priority_labels[min(int(issue_number)-1, 3)] if issue_number.isdigit() else "📋 Issue"
+            
+            return f"""
+#### {priority} - Issue #{issue_number}: {clean_text}
+
+**Severity:** Priority {issue_number}  
+**Category:** API Design Flaw
+"""
         
-        content = re.sub(issue_pattern, format_issue_item, content, flags=re.MULTILINE)
+        content = re.sub(issue_pattern, format_numbered_issue, content, flags=re.MULTILINE)
         
-        # Format sub-bullets with indentation and styling (- **Location:** patterns)
-        sub_bullet_pattern = r'^(\s*-\s+\*\*[^*]+:\*\*\s+.+)$'
-        def format_sub_bullet(match):
-            bullet_text = match.group(1)
-            # Apply markdown formatting to sub-bullet text
-            formatted_text = re.sub(r'\*\*([^*]+):\*\*', r'<strong style="color: #64748b;">\1:</strong>', bullet_text)
-            formatted_text = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', formatted_text)
-            return f'<div style="background: rgba(100, 116, 139, 0.05); border-left: 2px solid #64748b; padding: 8px; margin: 5px 0 5px 20px; border-radius: 0 4px 4px 0;">{formatted_text}</div>'
+        # Format sub-bullet details with enhanced styling
+        sub_bullet_pattern = r'^\s*-\s+\*\*([^*]+):\*\*\s+(.+)$'
+        def format_issue_details(match):
+            label = match.group(1)
+            detail = match.group(2)
+            
+            label_icons = {
+                "Location": "📍", "Impact": "💥", "Fix": "🔧", 
+                "Priority": "⭐", "Reason": "💭", "Implementation": "🛠️"
+            }
+            
+            icon = label_icons.get(label, "•")
+            return f"**{icon} {label}:** {detail}"
         
-        content = re.sub(sub_bullet_pattern, format_sub_bullet, content, flags=re.MULTILINE)
+        content = re.sub(sub_bullet_pattern, format_issue_details, content, flags=re.MULTILINE)
+        return content
+    
+    enhanced_content = format_critical_issues(enhanced_content)
+    
+    # 4. Add summary statistics after executive summary
+    def add_analysis_stats(content):
+        # Count various elements for statistics
+        issue_count = len(re.findall(r'#### .* - Issue #\d+', content))
+        recommendation_count = len(re.findall(r'\*\*Fix:\*\*', content))
+        
+        stats_section = f"""
+## 📈 Analysis Summary
+
+| Metric | Count | Status |
+|--------|--------|--------|
+| Critical Issues | {issue_count} | {"🔴 Action Required" if issue_count > 2 else "🟡 Review Needed" if issue_count > 0 else "🟢 Good"} |
+| Recommendations | {recommendation_count} | {"📝 Improvement Plan Available" if recommendation_count > 0 else "✅ No Issues Found"} |
+| Analysis Depth | Comprehensive | 🔍 Full Coverage |
+
+---
+"""
+        
+        # Insert after executive summary if it exists
+        if "## 🎯 Executive Summary" in content:
+            content = content.replace("## 🎯 Executive Summary", stats_section + "## 🎯 Executive Summary")
+        else:
+            # Insert near the beginning
+            lines = content.split('\n')
+            for i, line in enumerate(lines):
+                if line.startswith('## ') and '🎯' not in line:
+                    lines.insert(i, stats_section)
+                    break
+            content = '\n'.join(lines)
         
         return content
     
-    enhanced_content = format_critical_issues_content(enhanced_content)
+    enhanced_content = add_analysis_stats(enhanced_content)
     
-    # Now handle remaining markdown formatting for other sections
-    # Handle **Issue:** patterns that weren't caught above
-    enhanced_content = re.sub(r'\*\*([^*]+):\*\*', r'<strong style="color: #3b82f6;">\1:</strong>', enhanced_content)
-    
-    # Handle general bold text **text** patterns
-    enhanced_content = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', enhanced_content)
-    
-    # 3. Format special sections first (before general headers)
-    # Executive Summary
-    executive_pattern = r'### (🎯 Executive Summary)'
-    enhanced_content = re.sub(executive_pattern,
-        r'<div style="background: linear-gradient(135deg, #059669, #10b981); padding: 15px; border-radius: 10px; margin: 20px 0;"><h3 style="color: white; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">\1</h3></div>',
-        enhanced_content)
-    
-    # Critical Issues
-    critical_issues_pattern = r'### (🚨 Critical Issues \(Priority Order\))'
-    enhanced_content = re.sub(critical_issues_pattern, 
-        r'<div style="background: linear-gradient(135deg, #dc2626, #ef4444); padding: 15px; border-radius: 10px; margin: 20px 0;"><h3 style="color: white; margin: 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">\1</h3></div>', 
-        enhanced_content)
-    
-    # 4. Format remaining section headers with better styling
-    section_patterns = {
-        r'### (.+)': r'<h3 style="background: linear-gradient(45deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; color: #3b82f6; font-size: 1.3em; margin: 20px 0 10px 0; font-weight: bold;">\1</h3>',
-        r'## (.+)': r'<h2 style="background: linear-gradient(45deg, #06b6d4, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; color: #06b6d4; font-size: 1.5em; margin: 25px 0 15px 0; padding-bottom: 8px; border-bottom: 2px solid #334155; font-weight: bold;">\1</h2>',
+    # 5. Format main section headers with better styling
+    header_replacements = {
+        r'### 🎯 Executive Summary': '## 🎯 Executive Summary\n*Key findings and overall assessment*',
+        r'### 🚨 Critical Issues \(Priority Order\)': '## 🚨 Critical Issues (Priority Order)\n*Issues requiring immediate attention*', 
+        r'### 🔍 Detailed Analysis': '## 🔍 Detailed Analysis\n*Comprehensive evaluation results*',
+        r'### (.+)': r'## \1'
     }
     
-    for pattern, replacement in section_patterns.items():
+    for pattern, replacement in header_replacements.items():
         enhanced_content = re.sub(pattern, replacement, enhanced_content)
     
-    # 5. Format code blocks
+    # 6. Format code blocks with language hints
     enhanced_content = re.sub(
         r'```(yaml|json|javascript|python)?\n(.*?)\n```',
-        r'<div style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin: 15px 0; font-family: monospace; overflow-x: auto;"><pre style="color: #e2e8f0; margin: 0; white-space: pre-wrap;"><code>\2</code></pre></div>',
+        lambda m: f"```{m.group(1) or 'yaml'}\n{m.group(2)}\n```\n*Example {m.group(1) or 'configuration'} implementation*",
         enhanced_content,
         flags=re.DOTALL
     )
     
-    # 7. Format numbered lists with better styling
-    enhanced_content = re.sub(r'^(\d+\. .+)$', r'<div style="background: rgba(59, 130, 246, 0.05); border-left: 3px solid #3b82f6; padding: 10px; margin: 5px 0; border-radius: 0 6px 6px 0;">\1</div>', enhanced_content, flags=re.MULTILINE)
+    # 7. Add visual separators and improve spacing
+    enhanced_content = re.sub(r'\n---\n', '\n\n---\n\n', enhanced_content)
+    enhanced_content = re.sub(r'\n{4,}', '\n\n', enhanced_content)
+    enhanced_content = re.sub(r'\*\*([^*]+):\*\*', r'**\1:**', enhanced_content)
     
-    # 8. Format bullet points
-    enhanced_content = re.sub(r'^- (.+)$', r'<div style="background: rgba(99, 102, 241, 0.03); border-left: 2px solid #6366f1; padding: 8px 12px; margin: 3px 0; border-radius: 0 4px 4px 0;">• \1</div>', enhanced_content, flags=re.MULTILINE)
+    # 8. Add final footer with action items
+    footer = """
+---
+
+## 🎯 Next Steps
+
+1. **Address Critical Issues:** Start with Priority 1 items for immediate impact
+2. **Implement Recommendations:** Follow the provided fixes and improvements  
+3. **Monitor Progress:** Re-run analysis after implementing changes
+4. **Documentation:** Update API documentation based on findings
+
+*This analysis was generated using AI-powered evaluation tools. For detailed implementation guidance, consult the specific recommendations above.*
+"""
     
-    return enhanced_content
+    enhanced_content += footer
+    
+    return enhanced_content.strip()
 
 async def start_analysis_streaming():
     """Start streaming API analysis using backend"""
