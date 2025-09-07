@@ -52,7 +52,7 @@ watchdog = "^6.0.0"
 # Vector Database & Embeddings (optional for large API support)
 chromadb = {version = "^0.4.22", optional = true}
 sentence-transformers = {version = "^2.2.2", optional = true}
-tiktoken = "^0.5.2"
+tiktoken = "^0.11.0"
 redis = {version = "^5.0.1", optional = true}
 
 [tool.poetry.group.dev.dependencies]
