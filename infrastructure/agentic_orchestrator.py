@@ -85,7 +85,7 @@ class SpecializedAgent:
                                     "location": {"type": "string"},
                                     "fix": {"type": "string"}
                                 },
-                                "required": ["type", "title", "description"],
+                                "required": ["type", "severity", "title", "description"],
                                 "additionalProperties": False
                             }
                         },

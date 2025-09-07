@@ -136,6 +136,65 @@ class SimpleLLMManager:
 
         return optimized
 
+    async def generate_stream(self, request: LLMRequest):
+        """
+        Generate streaming response from LLM
+        """
+        import json
+        
+        if not self.client:
+            yield f"data: {json.dumps({'error': 'LLM not available - please set OPENAI_API_KEY'})}\n\n"
+            return
+
+        # Validate model before proceeding
+        if not self._is_valid_model(request.model):
+            yield f"data: {json.dumps({'error': f'Unsupported model: {request.model}'})}\n\n"
+            return
+
+        # Optimize request parameters for the specific model
+        optimized_request = self.optimize_request(request)
+
+        try:
+            # Clean prompt content to avoid encoding issues
+            clean_prompt = optimized_request.prompt
+            clean_prompt = clean_prompt.replace("'", "'").replace("'", "'").replace(""", '"').replace(""", '"')
+            
+            # Build the request parameters using optimized request
+            completion_params = {
+                "model": optimized_request.model,
+                "messages": [{"role": "user", "content": clean_prompt}],
+                "stream": True,  # Enable streaming
+            }
+            
+            # Use correct parameter name based on model type
+            if ModelConfig.is_o1_model(optimized_request.model):
+                completion_params["max_completion_tokens"] = optimized_request.max_tokens
+            else:
+                completion_params["max_tokens"] = optimized_request.max_tokens
+
+            # O1 models don't support temperature parameter
+            if not ModelConfig.is_o1_model(optimized_request.model):
+                completion_params["temperature"] = optimized_request.temperature
+
+            # Make the streaming API call
+            stream = await self.client.chat.completions.create(**completion_params)
+            
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    yield f"data: {json.dumps({'content': content})}\n\n"
+            
+            yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            error_str = str(e)
+            if "API key" in error_str.lower():
+                error_str = "Invalid or missing API key"
+            elif "rate limit" in error_str.lower():
+                error_str = "Rate limit exceeded, please try again later"
+            
+            yield f"data: {json.dumps({'error': error_str})}\n\n"
+
     async def generate(self, request: LLMRequest) -> Optional[LLMResponse]:
         """
         Generate response from LLM with optional structured output
@@ -168,8 +227,15 @@ class SimpleLLMManager:
             completion_params = {
                 "model": optimized_request.model,
                 "messages": [{"role": "user", "content": clean_prompt}],
-                "max_tokens": optimized_request.max_tokens,
             }
+            
+            # Use correct parameter name based on model type
+            if ModelConfig.is_o1_model(optimized_request.model):
+                # O1 models use max_completion_tokens
+                completion_params["max_completion_tokens"] = optimized_request.max_tokens
+            else:
+                # Standard models use max_tokens
+                completion_params["max_tokens"] = optimized_request.max_tokens
 
             # O1 models don't support temperature parameter
             if not ModelConfig.is_o1_model(optimized_request.model):

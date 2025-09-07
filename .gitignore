@@ -84,6 +84,14 @@ secrets/
 *.p12
 *.pfx
 
+# Test files and health checks
+health_check_results.json
+*_test_*.py
+quick_test.py
+system_health_check.py
+working_app.py
+test_api_spec.json
+
 # Node modules (if any)
 node_modules/
 

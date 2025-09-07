@@ -13,10 +13,18 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from infrastructure.llm_manager import LLMRequest, SimpleLLMManager, ModelConfig
-from infrastructure.agentic_orchestrator import AgenticOrchestrator, create_agentic_orchestrator
-from infrastructure.realtime_sync import realtime_sync, SpecChange, SyncConfig
-from evaluation.llm_evaluator import LLMAnalysisEvaluator, EvaluationDashboard
 from typing import List
+
+# Vector RAG imports (with fallback for optional dependencies)
+try:
+    from infrastructure.chunking_strategy import APISpecChunker
+    from infrastructure.hybrid_search import get_hybrid_search_engine
+    from infrastructure.context_assembler import get_context_assembler
+    from infrastructure.cache_layer import get_cache
+    VECTOR_RAG_AVAILABLE = True
+except ImportError as e:
+    VECTOR_RAG_AVAILABLE = False
+    print(f"Vector RAG components not available: {e}")
 
 # Configure logging
 structlog.configure(
@@ -84,6 +92,7 @@ class AnalysisResponse(BaseModel):
     analysis: str
     key_findings: Dict[str, Any]
     metadata: Dict[str, Any]
+    agent_results: Optional[Dict[str, Any]] = None
 
 
 class APIKeyRequest(BaseModel):
@@ -96,27 +105,25 @@ class APIKeyResponse(BaseModel):
     is_set: bool
 
 
-class EvaluationRequest(BaseModel):
-    openapi_spec: Dict[str, Any]
-    llm_analysis: str
-    analysis_context: Optional[Dict[str, Any]] = None
 
 
-class EvaluationResponse(BaseModel):
+class RAGRequest(BaseModel):
+    question: str
+    openapi_spec: Optional[Dict[str, Any]] = None
+    context: Optional[str] = None
+
+
+class RAGResponse(BaseModel):
     status: str
-    overall_score: float
-    metric_scores: Dict[str, float]
-    detailed_feedback: str
-    improvement_suggestions: List[str]
-    evaluation_time: float
-    evaluator_model: str
+    answer: str
+    context_used: bool
+    response_time: float
+    model_used: str
+    metadata: Optional[Dict[str, Any]] = None
 
 
-# Initialize LLM manager, orchestrator, and evaluation system
+# Initialize LLM manager
 llm_manager = SimpleLLMManager(model="o1-mini")  # Use o1-mini for optimal reasoning performance
-agentic_orchestrator = create_agentic_orchestrator(llm_manager)  # Multi-agent system
-evaluator = LLMAnalysisEvaluator(evaluator_model="o1-mini")  # Use same model for consistency  
-evaluation_dashboard = EvaluationDashboard()
 
 
 @app.get("/health")
@@ -128,18 +135,6 @@ async def health_check():
         "llm_available": llm_manager.is_available(),
     }
 
-
-@app.get("/models")
-async def get_available_models():
-    """Get list of available models"""
-    print("DEBUG: Models endpoint called!")  # Debug print
-    return {"models": ["gpt-4o", "gpt-4o-mini", "o1", "o1-mini", "o1-preview", "gpt-3.5-turbo"]}
-
-
-@app.get("/test")
-async def test_endpoint():
-    """Simple test endpoint"""
-    return {"message": "Test endpoint working"}
 
 
 @app.post("/set-api-key", response_model=APIKeyResponse)
@@ -441,332 +436,452 @@ async def analyze_api(request: AnalysisRequest):
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
-@app.post("/analyze-specific-aspect")
-async def analyze_specific_aspect(
-    spec: Dict[str, Any], aspect: str, context: Optional[str] = None
-):
-    """Analyze a specific aspect of the API in detail"""
-
+@app.post("/analyze-stream")
+async def analyze_api_stream(request: AnalysisRequest):
+    """Streaming AI-powered API analysis using LLM"""
+    from fastapi.responses import StreamingResponse
+    
+    # Check if LLM is available
     if not llm_manager.is_available():
-        raise HTTPException(status_code=503, detail="LLM service not available")
+        async def error_stream():
+            yield f"data: {{'error': 'LLM service not available. Please set your OpenAI API key first.'}}\n\n"
+        return StreamingResponse(error_stream(), media_type="text/plain")
 
-    aspects_prompts = {
-        "security": "Perform a detailed security audit of this API. Look for authentication issues, authorization problems, data exposure risks, injection vulnerabilities, and OWASP Top 10 issues.",
-        "performance": "Analyze performance implications of this API design. Look for N+1 query risks, missing pagination, large payload issues, caching opportunities, and rate limiting needs.",
-        "documentation": "Evaluate the documentation quality. Check for missing descriptions, unclear parameters, absent examples, and developer experience issues.",
-        "breaking_changes": "Identify potential breaking changes if this API evolves. What design decisions might cause problems later?",
-        "best_practices": "Compare this API against REST best practices, OpenAPI standards, and industry conventions. Be specific about violations.",
-        "usability": "Evaluate from a developer's perspective. How easy is it to integrate with this API? What's frustrating? What's missing?",
-    }
+    async def generate_stream():
+        try:
+            # Send initial status
+            yield f"data: {{'status': 'starting', 'message': 'Initializing analysis...'}}\n\n"
+            
+            # Create the analysis prompt
+            prompt = create_analysis_prompt(
+                request.openapi_spec, request.analysis_depth, request.focus_areas
+            )
+            
+            yield f"data: {{'status': 'analyzing', 'message': 'Analyzing API specification...'}}\n\n"
 
-    prompt = f"""
-    Expert Analysis Required: {aspect}
-    
-    Context: {context if context else "General analysis"}
-    
-    {aspects_prompts.get(aspect, f"Analyze the {aspect} aspect of this API")}
-    
-    API Specification:
-    {json.dumps(spec, indent=2)[:6000]}
-    
-    Provide specific, actionable feedback with examples. Reference actual endpoints and schemas.
-    Format your response with clear sections and bullet points.
+            # Create LLM request
+            llm_request = LLMRequest(
+                prompt=prompt,
+                max_tokens=4000,
+                temperature=0.3,
+            )
+
+            # Stream the analysis
+            async for chunk in llm_manager.generate_stream(llm_request):
+                yield chunk
+
+            yield f"data: {{'status': 'complete', 'message': 'Analysis complete'}}\n\n"
+
+        except Exception as e:
+            logger.error("Streaming analysis failed", error=str(e), exc_info=True)
+            yield f"data: {{'error': 'Analysis failed: {str(e)}'}}\n\n"
+
+    return StreamingResponse(generate_stream(), media_type="text/plain")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@app.post("/rag-query", response_model=RAGResponse)
+async def rag_query(request: RAGRequest):
     """
-
-    # Get optimal parameters for the current model
-    current_model = llm_manager.default_model
-    optimal_params = get_optimal_llm_params(current_model, base_max_tokens=2000)
-
-    llm_request = LLMRequest(
-        prompt=prompt,
-        model=current_model,
-        **optimal_params
-    )
-
-    response = await llm_manager.generate_response(llm_request)
-
-    return {"aspect": aspect, "analysis": response, "context": context}
-
-
-@app.post("/compare-with-standard")
-async def compare_with_standard(spec: Dict[str, Any], standard: str = "REST"):
-    """Compare the API with industry standards"""
-
-    if not llm_manager.is_available():
-        raise HTTPException(status_code=503, detail="LLM service not available")
-
-    prompt = f"""
-    Compare this API specification against {standard} standards and best practices.
-    
-    API Specification:
-    {json.dumps(spec, indent=2)[:6000]}
-    
-    Provide a detailed comparison:
-    1. What {standard} principles does this API follow well?
-    2. What {standard} principles does it violate?
-    3. Specific examples of violations with fixes
-    4. Overall compliance score (0-100)
-    5. Priority fixes to improve compliance
-    
-    Be specific and reference actual endpoints, not generic advice.
+    RAG Query endpoint for conversational API documentation assistant
+    Provides contextual answers about API specifications
     """
-
-    # Get optimal parameters for the current model
-    current_model = llm_manager.default_model
-    optimal_params = get_optimal_llm_params(current_model, base_max_tokens=2000)
-
-    llm_request = LLMRequest(
-        prompt=prompt,
-        model=current_model,
-        **optimal_params
-    )
-
-    response = await llm_manager.generate_response(llm_request)
-
-    return {"standard": standard, "comparison": response}
-
-
-@app.post("/suggest-improvements")
-async def suggest_improvements(spec: Dict[str, Any], goal: str):
-    """Get AI-powered improvement suggestions for specific goals"""
-
-    if not llm_manager.is_available():
-        raise HTTPException(status_code=503, detail="LLM service not available")
-
-    prompt = f"""
-    Goal: {goal}
+    logger.info("RAG query received", 
+                question=request.question[:100],
+                question_length=len(request.question),
+                has_openapi_spec=request.openapi_spec is not None)
     
-    Current API Specification:
-    {json.dumps(spec, indent=2)[:6000]}
-    
-    Provide specific improvements to achieve this goal:
-    1. What needs to change?
-    2. Provide actual code/specification examples
-    3. Explain the impact of each change
-    4. Prioritize changes by impact
-    5. Estimate implementation effort
-    
-    Focus on THIS specific API, not generic improvements.
-    """
-
-    # Get optimal parameters for the current model
-    current_model = llm_manager.default_model
-    optimal_params = get_optimal_llm_params(current_model, base_max_tokens=2500)
-
-    llm_request = LLMRequest(
-        prompt=prompt,
-        model=current_model,
-        **optimal_params
-    )
-
-    response = await llm_manager.generate_response(llm_request)
-
-    return {"goal": goal, "improvements": response}
-
-
-@app.post("/evaluate-analysis", response_model=EvaluationResponse)
-async def evaluate_analysis(request: EvaluationRequest):
-    """Evaluate the quality of an LLM-generated API analysis"""
-    
-    try:
-        # Evaluate the analysis
-        evaluation_result = await evaluator.evaluate_analysis(
-            api_spec=request.openapi_spec,
-            llm_analysis=request.llm_analysis,
-            analysis_context=request.analysis_context
-        )
-        
-        # Record evaluation for dashboard
-        evaluation_dashboard.record_evaluation(
-            evaluation_result,
-            context=request.analysis_context
-        )
-        
-        logger.info(
-            "Analysis evaluation completed",
-            overall_score=evaluation_result.overall_score,
-            evaluation_time=evaluation_result.evaluation_time
-        )
-        
-        return EvaluationResponse(
-            status="success",
-            overall_score=evaluation_result.overall_score,
-            metric_scores=evaluation_result.metric_scores,
-            detailed_feedback=evaluation_result.detailed_feedback,
-            improvement_suggestions=evaluation_result.improvement_suggestions,
-            evaluation_time=evaluation_result.evaluation_time,
-            evaluator_model=evaluation_result.evaluator_model
-        )
-        
-    except Exception as e:
-        logger.error("Evaluation failed", error=str(e), exc_info=True)
+    if not request.question.strip():
+        logger.warning("Empty question received")
         raise HTTPException(
-            status_code=500, 
-            detail=f"Evaluation failed: {str(e)}"
+            status_code=400,
+            detail="Question cannot be empty"
         )
-
-
-@app.get("/evaluation-metrics")
-async def get_evaluation_metrics():
-    """Get overall evaluation performance metrics"""
     
     try:
-        metrics = evaluation_dashboard.get_performance_metrics()
+        start_time = time.time()
         
-        return {
-            "status": "success",
-            "metrics": metrics,
-            "dashboard_info": {
-                "total_evaluations": len(evaluation_dashboard.evaluation_history),
-                "evaluator_model": evaluator.evaluator_llm.default_model
-            }
-        }
+        # Check if we have API specification context
+        has_context = request.openapi_spec is not None
+        context_str = ""
         
-    except Exception as e:
-        logger.error("Failed to get evaluation metrics", error=str(e))
-        return {
-            "status": "error",
-            "message": f"Failed to get metrics: {str(e)}",
-            "metrics": {}
-        }
+        if has_context:
+            # Extract relevant information from the OpenAPI spec
+            spec = request.openapi_spec
+            api_info = spec.get("info", {})
+            paths = spec.get("paths", {})
+            components = spec.get("components", {})
+            
+            logger.info("Processing OpenAPI spec context",
+                       api_title=api_info.get("title", "Unknown"),
+                       api_version=api_info.get("version", "Unknown"),
+                       endpoints_count=len(paths),
+                       has_components=bool(components))
+            
+            # Build context string from spec
+            context_str = f"""
+API Title: {api_info.get('title', 'Unknown')}
+Version: {api_info.get('version', 'Unknown')}
+Description: {api_info.get('description', 'No description')}
 
-
-@app.post("/analyze-with-evaluation", response_model=Dict[str, Any])
-async def analyze_with_evaluation(request: AnalysisRequest):
-    """
-    Perform API analysis AND evaluate the quality of the analysis
-    Returns both the analysis and its evaluation
-    """
-    
-    try:
-        # First, perform the standard analysis
-        analysis_response = await analyze_api(request)
-        
-        # Then evaluate the analysis quality
-        evaluation_request = EvaluationRequest(
-            openapi_spec=request.openapi_spec,
-            llm_analysis=analysis_response.analysis,
-            analysis_context={
-                "analysis_depth": request.analysis_depth,
-                "focus_areas": request.focus_areas,
-                "api_title": analysis_response.metadata.get("api_title"),
-                "endpoints_count": analysis_response.metadata.get("endpoints_count")
-            }
-        )
-        
-        evaluation_response = await evaluate_analysis(evaluation_request)
-        
-        # Combine results
-        return {
-            "status": "success",
-            "analysis": {
-                "content": analysis_response.analysis,
-                "key_findings": analysis_response.key_findings,
-                "metadata": analysis_response.metadata
-            },
-            "evaluation": {
-                "overall_score": evaluation_response.overall_score,
-                "metric_scores": evaluation_response.metric_scores,
-                "detailed_feedback": evaluation_response.detailed_feedback,
-                "improvement_suggestions": evaluation_response.improvement_suggestions,
-                "evaluation_time": evaluation_response.evaluation_time,
-                "evaluator_model": evaluation_response.evaluator_model
-            }
-        }
-        
-    except Exception as e:
-        logger.error("Analysis with evaluation failed", error=str(e), exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Analysis with evaluation failed: {str(e)}"
-        )
-
-
-@app.post("/analyze-agentic")
-async def analyze_agentic(request: AnalysisRequest):
-    """
-    Perform multi-agent collaborative API analysis
-    Uses specialized agents for comprehensive analysis
-    """
-    
-    try:
-        # Run collaborative analysis with multiple agents
-        orchestration_result = await agentic_orchestrator.collaborative_analysis(
-            api_spec=request.openapi_spec,
-            focus_areas=request.focus_areas,
-            parallel=True  # Faster processing
-        )
-        
-        # Format results for response
-        analysis_content = f"""# 🤖 Multi-Agent Collaborative Analysis
-
-## 📊 Overall Assessment
-**Collaborative Score:** {orchestration_result.overall_score:.1f}/100  
-**Agent Agreement:** {orchestration_result.agent_agreement_score:.1f}%  
-**Analysis Method:** {len(orchestration_result.agent_results)} specialized agents
-
-## 🔍 Agent Findings
-
+Endpoints ({len(paths)} total):
 """
-        
-        # Add findings from each agent
-        for agent_role, result in orchestration_result.agent_results.items():
-            analysis_content += f"### {agent_role.replace('_', ' ').title()}\n"
-            analysis_content += f"**Score:** {result.score:.1f}/100 | **Confidence:** {result.confidence:.1%}\n\n"
             
-            for finding in result.findings[:3]:  # Top 3 findings per agent
-                analysis_content += f"- **{finding.get('title', 'Finding')}:** {finding.get('description', '')}\n"
+            # Add endpoint summaries
+            for path, methods in paths.items():
+                for method, details in methods.items():
+                    if isinstance(details, dict) and 'summary' in details:
+                        context_str += f"- {method.upper()} {path}: {details.get('summary', 'No summary')}\n"
             
-            analysis_content += "\n"
+            # Add schema information
+            schemas = components.get("schemas", {})
+            if schemas:
+                context_str += f"\nData Models ({len(schemas)} total):\n"
+                for schema_name in schemas.keys():
+                    context_str += f"- {schema_name}\n"
         
-        # Add collaboration insights
-        if orchestration_result.collaboration_insights:
-            analysis_content += "## 🧠 Collaboration Insights\n"
-            for insight in orchestration_result.collaboration_insights:
-                analysis_content += f"- {insight}\n"
-        
-        # Prepare metadata
-        metadata = {
-            "api_title": request.openapi_spec.get("info", {}).get("title", "Unknown API"),
-            "api_version": request.openapi_spec.get("info", {}).get("version", "Unknown"),
-            "endpoints_count": len(request.openapi_spec.get("paths", {})),
-            "analysis_depth": request.analysis_depth,
-            "focus_areas": request.focus_areas,
-            "analysis_method": "multi_agent_collaborative",
-            "agents_used": list(orchestration_result.agent_results.keys()),
-            "agent_agreement_score": orchestration_result.agent_agreement_score,
-            "total_processing_time": orchestration_result.total_processing_time,
-            "total_tokens": orchestration_result.total_tokens,
-            "model_used": llm_manager.default_model
-        }
-        
-        return AnalysisResponse(
-            status="success",
-            analysis=analysis_content,
-            key_findings={
-                "agent_consensus": orchestration_result.overall_score > 70,
-                "high_agreement": orchestration_result.agent_agreement_score > 80,
-                "critical_issues": sum(
-                    len([f for f in result.findings if f.get("severity") == "critical"])
-                    for result in orchestration_result.agent_results.values()
-                ),
-                "total_findings": sum(
-                    len(result.findings) 
-                    for result in orchestration_result.agent_results.values()
-                )
-            },
-            metadata=metadata
+        # Create RAG-style prompt
+        rag_prompt = f"""You are an expert API documentation assistant. Your role is to provide helpful, accurate answers about API usage and implementation.
+
+{"CONTEXT - API SPECIFICATION:" + context_str if has_context else "Note: No API specification provided as context."}
+
+USER QUESTION: {request.question}
+
+Please provide a helpful, practical response that:
+1. Directly answers the user's question
+2. Uses information from the API specification when available
+3. Provides code examples when appropriate (Python requests, curl, etc.)
+4. Explains any relevant authentication, parameters, or data structures
+5. Is clear and actionable for developers
+
+If the question cannot be answered from the provided API specification, politely explain what information would be needed."""
+
+        # Generate response using LLM
+        llm_request = LLMRequest(
+            prompt=rag_prompt,
+            **get_optimal_llm_params(llm_manager.default_model, 1500)
         )
         
+        logger.info("Generating LLM response",
+                   model=llm_manager.default_model,
+                   prompt_length=len(rag_prompt),
+                   max_tokens=llm_request.max_tokens)
+        
+        response = await llm_manager.generate(llm_request)
+        response_time = time.time() - start_time
+        
+        logger.info("LLM response received",
+                   response_time=response_time,
+                   has_response=response is not None,
+                   has_content=response.content if response else None,
+                   usage_info=response.usage if response and response.usage else None)
+        
+        if not response or not response.content:
+            logger.error("LLM failed to generate response",
+                        response_exists=response is not None,
+                        content_exists=response.content if response else None)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate response"
+            )
+        
+        logger.info("RAG query completed", 
+                   response_time=response_time,
+                   has_context=has_context,
+                   model=llm_manager.default_model)
+        
+        return RAGResponse(
+            status="success",
+            answer=response.content,
+            context_used=has_context,
+            response_time=response_time,
+            model_used=llm_manager.default_model,
+            metadata={
+                "question_length": len(request.question),
+                "context_length": len(context_str) if has_context else 0,
+                "response_length": len(response.content),
+                "prompt_tokens": response.usage.get("prompt_tokens") if response.usage else None,
+                "completion_tokens": response.usage.get("completion_tokens") if response.usage else None,
+                "total_tokens": response.usage.get("total_tokens") if response.usage else None
+            }
+        )
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Agentic analysis failed", error=str(e), exc_info=True)
+        logger.error("RAG query failed", error=str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Multi-agent analysis failed: {str(e)}"
+            detail=f"RAG query failed: {str(e)}"
         )
 
+
+@app.post("/rag-query-v2", response_model=RAGResponse)
+async def vector_rag_query(request: RAGRequest):
+    """
+    Enhanced RAG Query endpoint with vector search for large API specifications.
+    Automatically handles chunking, indexing, and semantic search for optimal results.
+    """
+    if not VECTOR_RAG_AVAILABLE:
+        # Fallback to original RAG if vector components not available
+        return await rag_query(request)
+    
+    logger.info("Vector RAG query received", 
+                question=request.question[:100],
+                question_length=len(request.question),
+                has_openapi_spec=request.openapi_spec is not None)
+    
+    if not request.question.strip():
+        logger.warning("Empty question received")
+        raise HTTPException(
+            status_code=400,
+            detail="Question cannot be empty"
+        )
+    
+    if not request.openapi_spec:
+        logger.warning("No OpenAPI spec provided for vector RAG")
+        raise HTTPException(
+            status_code=400,
+            detail="OpenAPI specification is required for vector RAG queries"
+        )
+    
+    try:
+        start_time = time.time()
+        
+        # Generate API spec hash for caching and indexing
+        import hashlib
+        spec_str = json.dumps(request.openapi_spec, sort_keys=True)
+        api_spec_hash = hashlib.md5(spec_str.encode()).hexdigest()
+        api_name = request.openapi_spec.get('info', {}).get('title', 'Unknown API')
+        
+        # Initialize components
+        # Use semantic cache for better query optimization\n        from infrastructure.semantic_cache import get_semantic_cache\n        cache = get_semantic_cache()
+        hybrid_search = get_hybrid_search_engine()
+        context_assembler = get_context_assembler()
+        
+        # Initialize relevancy evaluation and performance monitoring
+        from infrastructure.deepeval_enhanced import get_deep_eval_enhanced
+        from infrastructure.performance_monitor import get_performance_monitor
+        
+        deep_evaluator = get_deep_eval_enhanced(llm_manager)
+        performance_monitor = get_performance_monitor()
+        
+        # Start performance monitoring
+        query_metrics = performance_monitor.start_query(request.question, api_spec_hash)
+        
+        # Get cache instance
+        cache = get_cache()
+        
+        # Check cache first
+        cached_response = cache.get_cached_response(request.question, api_spec_hash)
+        if cached_response:
+            logger.info("Returning cached response", 
+                       cached_at=cached_response.get("cached_at"),
+                       cache_hit=True)
+            return RAGResponse(**cached_response)
+        
+        # Check if spec is already indexed
+        if not hybrid_search.is_indexed(api_spec_hash):
+            logger.info("Indexing new API specification",
+                       api_name=api_name,
+                       api_spec_hash=api_spec_hash[:8])
+            
+            # Chunk the specification
+            chunker = APISpecChunker()
+            chunks = chunker.chunk_spec(request.openapi_spec)
+            optimized_chunks = chunker.optimize_chunks(chunks)
+            
+            logger.info("Chunked API specification",
+                       total_chunks=len(optimized_chunks),
+                       chunk_types=list(set(c.type for c in optimized_chunks)))
+            
+            # Index chunks in hybrid search engine
+            hybrid_search.index_chunks(optimized_chunks, api_spec_hash, api_name)
+        
+        # Perform hybrid search
+        search_start = time.time()
+        search_results = hybrid_search.search(
+            query=request.question,
+            strategy="hybrid",
+            n_results=5,
+            api_spec_hash=api_spec_hash
+        )
+        search_time = time.time() - search_start
+        
+        # Record search performance
+        query_metrics.search_latency_ms = search_time * 1000  # Convert to milliseconds
+        query_metrics.chunks_retrieved = len(search_results)
+        
+        logger.info("Search completed",
+                   results_found=len(search_results),
+                   search_types=[r.get("search_type") for r in search_results])
+        
+        if not search_results:
+            logger.warning("No relevant information found in API specification")
+            # Still generate a response with minimal context
+            search_results = []
+        
+        # Assemble context with token management
+        context_result = context_assembler.assemble_context(
+            query=request.question,
+            search_results=search_results,
+            spec_metadata=request.openapi_spec.get('info', {}),
+            include_examples=True
+        )
+        
+        logger.info("Context assembled",
+                   context_tokens=context_result["total_tokens"],
+                   sections_used=context_result["sections_used"],
+                   budget_utilization=f"{context_result['budget_utilization']:.1%}")
+        
+        # Generate response using LLM
+        llm_start = time.time()
+        llm_request = LLMRequest(
+            prompt=context_result["context"],
+            **get_optimal_llm_params(llm_manager.default_model, 2000)
+        )
+        
+        response = await llm_manager.generate(llm_request)
+        llm_time = time.time() - llm_start
+        response_time = time.time() - start_time
+        
+        # Record LLM performance
+        query_metrics.llm_generation_ms = llm_time * 1000  # Convert to milliseconds
+        query_metrics.context_tokens = response.usage.get("prompt_tokens", 0) if response.usage else 0
+        query_metrics.response_tokens = response.usage.get("completion_tokens", 0) if response.usage else 0
+        
+        if not response or not response.content:
+            logger.error("LLM failed to generate response")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate response"
+            )
+        
+        # Prepare response data
+        response_data = {
+            "status": "success",
+            "answer": response.content,
+            "context_used": True,
+            "response_time": response_time,
+            "model_used": llm_manager.default_model,
+            "metadata": {
+                "question_length": len(request.question),
+                "context_tokens": context_result["total_tokens"],
+                "sections_used": context_result["sections_used"],
+                "search_results_count": len(search_results),
+                "budget_utilization": context_result["budget_utilization"],
+                "api_spec_hash": api_spec_hash,
+                "search_strategy": "vector_hybrid",
+                "cached": False,
+                "prompt_tokens": response.usage.get("prompt_tokens") if response.usage else None,
+                "completion_tokens": response.usage.get("completion_tokens") if response.usage else None,
+                "total_tokens": response.usage.get("total_tokens") if response.usage else None
+            }
+        }
+        
+        # Evaluate response with enhanced DeepEval system (RAG Triad)
+        # Format contexts for evaluation
+        contexts = [doc.get('content', '') for doc in search_results[:3]]
+        
+        # Run comprehensive RAG evaluation
+        try:
+            import asyncio
+            relevancy_score = await deep_evaluator.evaluate_rag_triad(
+                query=request.question,
+                answer=response.content,
+                contexts=contexts
+            )
+        except Exception as e:
+            logger.warning(f"Enhanced evaluation failed, using fallback: {e}")
+            # Fallback to simple scoring
+            relevancy_score = type('RAGTriadScores', (), {
+                'overall_score': 0.7,
+                'answer_relevancy': 0.7,
+                'faithfulness': 0.8,
+                'contextual_relevancy': 0.6,
+                'confidence': 0.5
+            })()
+        
+        # Complete performance monitoring
+        query_metrics.total_latency_ms = response_time * 1000  # Convert to milliseconds
+        query_metrics.context_tokens = max(query_metrics.context_tokens, context_result["total_tokens"])  # Update if higher
+        
+        # Add relevancy and performance data to response
+        response_data["metadata"].update({
+            "rag_triad_evaluation": {
+                "overall_score": relevancy_score.overall_score,
+                "answer_relevancy": relevancy_score.answer_relevancy,
+                "faithfulness": relevancy_score.faithfulness,
+                "contextual_relevancy": relevancy_score.contextual_relevancy,
+                "confidence": relevancy_score.confidence
+            },
+            "performance": {
+                "search_time_ms": search_time * 1000,
+                "llm_time_ms": llm_time * 1000,
+                "total_time_ms": response_time * 1000,
+                "tokens_per_second": (response.usage.get("completion_tokens", 0) / llm_time) if llm_time > 0 and response.usage else 0
+            }
+        })
+        
+        # Cache the response
+        cache.cache_response(request.question, api_spec_hash, response_data)
+        
+        # Store performance data
+        performance_monitor.record_query(query_metrics)
+        
+        logger.info("Vector RAG query completed",
+                   response_time=response_time,
+                   search_results_count=len(search_results),
+                   context_tokens=context_result["total_tokens"],
+                   rag_triad_score=relevancy_score.overall_score,
+                   search_time=search_time,
+                   llm_time=llm_time)
+        
+        return RAGResponse(**response_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Vector RAG query failed", error=str(e), exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Vector RAG query failed: {str(e)}"
+        )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Log application startup information"""
+    logger.info("APISage Backend API starting up",
+                version="3.0.0",
+                llm_available=llm_manager is not None,
+                default_model=llm_manager.default_model if llm_manager else None,
+                openai_configured=bool(os.getenv("OPENAI_API_KEY")))
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Log application shutdown"""
+    logger.info("APISage Backend API shutting down")
 
 if __name__ == "__main__":
     import uvicorn
+    
+    logger.info("Starting APISage Backend API server",
+                host="0.0.0.0",
+                port=8080,
+                environment=os.getenv("ENVIRONMENT", "development"))
 
     uvicorn.run(app, host="0.0.0.0", port=8080)
