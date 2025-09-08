@@ -50,7 +50,7 @@ structlog = "^24.1.0"
 watchdog = "^6.0.0"
 
 # Vector Database & Embeddings (optional for large API support)
-chromadb = {version = "^0.4.22", optional = true}
+chromadb = {version = "^1.0.20", optional = true}
 sentence-transformers = {version = "^2.2.2", optional = true}
 tiktoken = "^0.5.2"
 redis = {version = "^5.0.1", optional = true}
