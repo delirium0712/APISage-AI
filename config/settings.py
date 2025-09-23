@@ -79,38 +79,12 @@ def check_server_health() -> Tuple[bool, str]:
 
 
 def set_openai_api_key(api_key: str) -> str:
-    """Set OpenAI API key for enhanced analysis"""
+    """Set OpenAI API key for enhanced analysis - DEPRECATED: Use .env configuration instead"""
     if not api_key or not api_key.strip():
         return "⚠️ Please enter a valid OpenAI API key"
 
-    # Basic API key format validation
-    api_key = api_key.strip()
-    if not api_key.startswith("sk-") or len(api_key) < 20:
-        return "⚠️ Invalid API key format. OpenAI API keys should start with 'sk-'"
-
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/set-api-key",
-            json={"api_key": api_key},
-            timeout=TIMEOUT_API_KEY,
-        )
-
-        if response.status_code == 200:
-            result = response.json()
-            if result.get("status") == "success":
-                logger.info("OpenAI API key set successfully")
-                return "✅ OpenAI API key set successfully! Enhanced analysis is now available."
-            else:
-                error_msg = result.get("message", "Unknown error")
-                logger.warning(f"Failed to set API key: {error_msg}")
-                return f"⚠️ Failed to set API key: {error_msg}"
-        else:
-            logger.error(f"API key setting failed with status {response.status_code}")
-            return f"❌ Failed to set API key. Server responded with status {response.status_code}"
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Network error setting API key: {e}")
-        return f"❌ Failed to set API key: {str(e)}"
+    # Since we removed the API key endpoint, return an informative message
+    return "ℹ️ API key management has been simplified. Please set OPENAI_API_KEY in your .env file and restart the server."
 
 
 def analyze_openapi_spec(spec_content: str) -> Tuple[str, str, str, str]:
@@ -265,16 +239,16 @@ def format_analysis_results(
 
 ---
 
-### 📝 Summary
+<h3>📝 Summary</h3>
 {summary}
 
 ---
 
-### 📉 At a Glance
+<h3>📉 At a Glance</h3>
 - **Issues Found:** {len(issues)}
 - **Recommendations:** {len(recommendations)}
 
-### 📋 Analysis Details
+<h3>📋 Analysis Details</h3>
 - **Server Response Keys:** {', '.join(analysis.keys()) if isinstance(analysis, dict) else 'N/A'}
 - **Analysis Timestamp:** {analysis.get('timestamp', 'N/A')}
 """
@@ -303,11 +277,14 @@ def format_analysis_results(
                 fix = issue.get("fix", issue.get("solution"))
                 rule_name = issue.get("rule_name", issue.get("rule", issue.get("type")))
 
-                emoji = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🔵"}.get(
-                    severity, "⚪"
-                )
+                emoji = {
+                    "CRITICAL": "🔴",
+                    "HIGH": "🟠",
+                    "MEDIUM": "🟡",
+                    "LOW": "🔵",
+                }.get(severity, "⚪")
 
-                detailed_md += f"### {emoji} Issue #{i}: {rule_name or severity}\n\n"
+                detailed_md += f"<h3>{emoji} Issue #{i}: {rule_name or severity}</h3>\n\n"
                 detailed_md += f"**Description:** {message}\n\n"
                 if location:
                     detailed_md += f"**Location:** `{location}`\n\n"
@@ -326,7 +303,7 @@ def format_analysis_results(
             "✅ No specific recommendations were provided. The API is in good shape!"
         )
     else:
-        action_md += "### Top Recommendations to Improve Your API\n\n"
+        action_md += "<h3>Top Recommendations to Improve Your API</h3>\n\n"
         for i, rec in enumerate(recommendations, 1):
             if isinstance(rec, dict):
                 title = rec.get("title", rec.get("name", f"Recommendation {i}"))
@@ -412,7 +389,7 @@ def format_detailed_analysis_results(
                     implementation = win.get("implementation_guide", "")
                     outcome = win.get("expected_outcome", "")
 
-                    action_md += f"### {i}. {task}\n\n"
+                    action_md += f"<h3>{i}. {task}</h3>\n\n"
                     if rationale:
                         action_md += f"**Why this matters:** {rationale}\n\n"
                     if implementation:
@@ -437,7 +414,7 @@ def format_detailed_analysis_results(
                     phases = improvement.get("implementation_phases", [])
                     resources = improvement.get("resource_requirements", "")
 
-                    action_md += f"### {i}. {task}\n\n"
+                    action_md += f"<h3>{i}. {task}</h3>\n\n"
                     if rationale:
                         action_md += f"**Strategic value:** {rationale}\n\n"
                     if phases:
@@ -467,7 +444,7 @@ def format_detailed_analysis_results(
                     )
                     success_criteria = initiative.get("success_criteria", "")
 
-                    action_md += f"### {i}. {name}\n\n"
+                    action_md += f"<h3>{i}. {name}</h3>\n\n"
                     if business_case:
                         action_md += f"**Business case:** {business_case}\n\n"
                     if technical_requirements:
@@ -506,9 +483,7 @@ def get_server_logs() -> str:
                 emoji = (
                     "✅"
                     if status == "healthy"
-                    else "❌"
-                    if status == "unavailable"
-                    else "⚠️"
+                    else "❌" if status == "unavailable" else "⚠️"
                 )
                 logs_info += f"- **{component}:** {emoji} {status}\n"
 

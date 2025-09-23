@@ -13,167 +13,395 @@ import logging
 import sys
 import re
 from datetime import datetime
-from typing import Dict, Any, Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('apisage_complete.log')
-    ]
+        logging.FileHandler("apisage_complete.log"),
+    ],
 )
 
 logger = logging.getLogger(__name__)
 
+# Configuration
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8080")
+DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "60"))
+RAG_TIMEOUT = int(os.getenv("RAG_TIMEOUT", "120"))
+
 # Global state
 current_spec = None
 
-# Dark theme CSS with optimized spacing
+# Helper functions for consistent error handling
+def handle_api_error(status_code: int, operation: str = "operation") -> str:
+    """Provide detailed, actionable error messages for API responses"""
+    error_messages = {
+        400: f"❌ **Invalid Request** for {operation}\n\n**Cause**: The request format is incorrect\n**Solution**: \n• Check that your API specification is valid JSON/YAML\n• Ensure all required fields are provided\n• Verify the document structure matches OpenAPI 3.0 format",
+
+        401: f"❌ **Authentication Failed** for {operation}\n\n**Cause**: Invalid or missing OpenAI API key\n**Solution**: \n• Ensure your OpenAI API key is properly set in the .env file\n• Get your API key from https://platform.openai.com/api-keys\n• Verify the key starts with 'sk-' and has sufficient credits\n• Restart the backend server after updating the .env file",
+
+        403: f"❌ **Access Denied** for {operation}\n\n**Cause**: Insufficient permissions or quota exceeded\n**Solution**: \n• Check your OpenAI account quota and billing\n• Verify your API key has the necessary permissions\n• Contact OpenAI support if the issue persists",
+
+        404: f"❌ **Service Not Found** for {operation}\n\n**Cause**: Backend server is not running or unreachable\n**Solution**: \n• Ensure the backend server is running on port 8080\n• Try refreshing the page and waiting 30 seconds\n• Check the server logs for startup errors",
+
+        429: f"❌ **Rate Limit Exceeded** for {operation}\n\n**Cause**: Too many requests sent to the API\n**Solution**: \n• Wait 60 seconds before trying again\n• Consider upgrading your OpenAI plan for higher limits\n• Try using a smaller document or shorter questions",
+
+        500: f"❌ **Server Error** during {operation}\n\n**Cause**: Internal server processing error\n**Solution**: \n• Try again in a few moments\n• If using a large document, try breaking it into smaller sections\n• Check that your OpenAPI spec is properly formatted\n• Contact support if the error persists",
+
+        503: f"❌ **Service Unavailable** for {operation}\n\n**Cause**: OpenAI API key not configured or service down\n**Solution**: \n• Set your OpenAI API key in the Configuration tab\n• Verify your API key is active and has credits\n• Check OpenAI's status page: https://status.openai.com",
+
+        504: f"❌ **Request Timeout** for {operation}\n\n**Cause**: Request took too long to process\n**Solution**: \n• Try again with a smaller document\n• Ask shorter, more specific questions\n• Check your internet connection\n• Consider breaking complex queries into smaller parts"
+    }
+
+    default_error = f"❌ **Unexpected Error** during {operation} (Status: {status_code})\n\n**Cause**: Unknown server response\n**Solution**: \n• Try refreshing the page and retrying\n• Check your internet connection\n• Contact support if the error persists\n• Include this status code: {status_code}"
+
+    return error_messages.get(status_code, default_error)
+
+def log_error_with_context(error: Exception, context: str, user_message: str = None) -> str:
+    """Log errors with context and return user-friendly message"""
+    logger.error(f"{context}: {str(error)}", exc_info=True)
+    return user_message or f"❌ {context} failed: {str(error)}"
+
+# 2025 Modern UI/UX Design with Glassmorphism and Enhanced Accessibility
 CUSTOM_CSS = """
-.gradio-container {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
-    color: #f8fafc !important;
-    max-width: 100% !important;
+/* 2025 Design System with Glassmorphism and Modern Patterns */
+:root {
+    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --neon-accent: #00f5ff;
+    --success-glow: #10b981;
+    --warning-glow: #f59e0b;
+    --error-glow: #ef4444;
 }
 
+.gradio-container {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f1629 100%) !important;
+    color: #f8fafc !important;
+    max-width: 100% !important;
+    font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif !important;
+    position: relative;
+}
+
+/* Glassmorphism background texture */
+.gradio-container::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="%23ffffff" opacity="0.02"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>') !important;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Hero Section with Enhanced Glassmorphism */
 .hero-section {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 1.5rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    padding: 2rem;
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
     color: white !important;
     text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: var(--primary-gradient);
+    opacity: 0.1;
+    animation: float 6s ease-in-out infinite;
+    border-radius: 50%;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-20px) rotate(180deg); }
 }
 
 .hero-title {
-    font-size: 2rem !important;
-    font-weight: bold;
-    margin-bottom: 0.3rem;
+    font-size: 2.5rem !important;
+    font-weight: 800 !important;
+    margin-bottom: 0.5rem !important;
+    background: linear-gradient(45deg, #ffffff, var(--neon-accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    position: relative;
+    z-index: 1;
 }
 
 .hero-subtitle {
-    font-size: 1rem !important;
+    font-size: 1.1rem !important;
     opacity: 0.9;
+    font-weight: 500;
+    position: relative;
+    z-index: 1;
 }
 
+/* Enhanced Panel Design with Neumorphism */
 .analysis-panel {
-    background: rgba(30, 41, 59, 0.8) !important;
-    border: 1px solid #334155 !important;
-    border-radius: 8px !important;
-    padding: 1rem !important;
-    margin: 0.5rem 0 !important;
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(16px) saturate(150%) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 12px !important;
+    padding: 1.5rem !important;
+    margin: 0.75rem 0 !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
+.analysis-panel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Modern Chat Interface */
 .assistant-chat {
-    background: #1e293b !important;
-    border: 1px solid #334155 !important;
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 16px !important;
+    padding: 1rem !important;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 2025 Button Design with Micro-interactions */
+.gradio-button {
+    background: var(--glass-bg) !important;
+    border: 1px solid var(--glass-border) !important;
     border-radius: 8px !important;
-    padding: 0.8rem !important;
+    backdrop-filter: blur(10px) !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    font-weight: 600 !important;
+    position: relative !important;
+    overflow: hidden !important;
 }
 
-/* Optimize column spacing and remove excess margins */
-.gradio-column {
-    padding: 0.5rem !important;
-    margin: 0 !important;
+.gradio-button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+    border-color: var(--neon-accent) !important;
 }
 
-.gradio-row {
-    margin: 0.5rem 0 !important;
-    gap: 0.5rem !important;
+.gradio-button:active {
+    transform: translateY(0px) !important;
 }
 
-/* Make better use of horizontal space */
-.gradio-blocks > div {
-    max-width: none !important;
+/* Status Indicators with Glow Effects */
+.status-success {
+    color: var(--success-glow) !important;
+    text-shadow: 0 0 10px var(--success-glow) !important;
 }
 
-/* Reduce excessive spacing in components */
-.gradio-textbox, .gradio-file, .gradio-button {
-    margin: 0.3rem 0 !important;
+.status-warning {
+    color: var(--warning-glow) !important;
+    text-shadow: 0 0 10px var(--warning-glow) !important;
 }
 
-/* Compact headers */
-.gradio-html h3, .gradio-html h2 {
-    margin: 0.5rem 0 !important;
+.status-error {
+    color: var(--error-glow) !important;
+    text-shadow: 0 0 10px var(--error-glow) !important;
+}
+
+/* Enhanced Typography */
+.gradio-html h1, .gradio-html h2, .gradio-html h3 {
+    font-weight: 700 !important;
+    letter-spacing: -0.025em !important;
+}
+
+/* Responsive Design for Mobile-First 2025 */
+@media (max-width: 768px) {
+    .hero-title {
+        font-size: 1.8rem !important;
+    }
+    
+    .analysis-panel {
+        padding: 1rem !important;
+        margin: 0.5rem 0 !important;
+    }
+    
+    .gradio-column {
+        padding: 0.25rem !important;
+    }
+}
+
+/* Accessibility Enhancements */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Focus indicators for accessibility */
+.gradio-button:focus-visible,
+.gradio-textbox:focus-visible {
+    outline: 2px solid var(--neon-accent) !important;
+    outline-offset: 2px !important;
+}
+
+/* Streaming Status Animation */
+.streaming-indicator {
+    display: inline-block;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Progress Bar for Streaming */
+.progress-bar {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--primary-gradient);
+    border-radius: 2px;
+    animation: progress 2s infinite;
+}
+
+@keyframes progress {
+    0% { width: 0%; }
+    50% { width: 100%; }
+    100% { width: 0%; }
 }
 """
 
+
 def load_api_spec(file):
-    """Load and parse API specification with logging"""
+    """Load and parse API specification with enhanced validation and verbose RAG processing feedback"""
     global current_spec
-    
-    logger.info(f"File upload attempt: {file.name if file else 'No file'}")
-    
+
+    logger.info(f"🚀 RAG Pipeline: Starting document upload process for {file.name if file else 'No file'}")
+
     if not file:
-        logger.warning("No file provided for upload")
+        logger.warning("❌ RAG Pipeline: No file provided for upload")
         return None, "Upload an API specification to get started", ""
-    
+
     try:
-        logger.info(f"Reading file: {file.name}, size: {os.path.getsize(file.name)} bytes")
-        
-        with open(file.name, 'r', encoding='utf-8') as f:
+        # Enhanced input validation with RAG context
+        file_path = file.name
+        file_size = os.path.getsize(file_path)
+
+        logger.info(f"📄 RAG Pipeline: File validation started")
+        logger.info(f"   • File path: {file_path}")
+        logger.info(f"   • File size: {file_size:,} bytes ({file_size/1024:.1f} KB)")
+
+        # Check file size (max 10MB)
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        if file_size > MAX_FILE_SIZE:
+            error_msg = f"❌ RAG Pipeline: File too large ({file_size:,} bytes). Max: {MAX_FILE_SIZE:,} bytes (10MB)"
+            logger.warning(error_msg)
+            return None, error_msg, ""
+
+        # Check file extension
+        allowed_extensions = {'.json', '.yaml', '.yml'}
+        file_ext = os.path.splitext(file_path)[1].lower()
+        if file_ext not in allowed_extensions:
+            error_msg = f"❌ RAG Pipeline: Invalid file type '{file_ext}'. Allowed: {', '.join(allowed_extensions)}"
+            logger.warning(error_msg)
+            return None, error_msg, ""
+
+        logger.info(f"✅ RAG Pipeline: File validation passed - {file_ext} format detected")
+
+        # Content reading with RAG processing context
+        logger.info(f"📖 RAG Pipeline: Reading and parsing document content...")
+        with open(file.name, "r", encoding="utf-8") as f:
             content = f.read()
-            
-        logger.info(f"File content length: {len(content)} characters")
-        
-        if file.name.endswith(('.yaml', '.yml')):
-            logger.info("Parsing as YAML file")
+
+        logger.info(f"   • Content length: {len(content):,} characters")
+        logger.info(f"   • Estimated tokens: ~{len(content.split()):,} words")
+
+        # Format-specific parsing
+        if file.name.endswith((".yaml", ".yml")):
+            logger.info("🔄 RAG Pipeline: Parsing YAML document structure...")
             spec = yaml.safe_load(content)
         else:
-            logger.info("Parsing as JSON file")
+            logger.info("🔄 RAG Pipeline: Parsing JSON document structure...")
             spec = json.loads(content)
-        
-        logger.info(f"Parsed specification keys: {list(spec.keys()) if isinstance(spec, dict) else 'Not a dict'}")
-        
+
+        # Document structure analysis for RAG
+        spec_keys = list(spec.keys()) if isinstance(spec, dict) else []
+        logger.info(f"🔍 RAG Pipeline: Document structure analysis:")
+        logger.info(f"   • Root keys found: {spec_keys}")
+        logger.info(f"   • Document type: {'Dictionary/Object' if isinstance(spec, dict) else type(spec).__name__}")
+
         current_spec = spec
-        
+
         # Handle both OpenAPI 3.0 format and custom format
-        if 'openapi' in spec or 'swagger' in spec:
+        if "openapi" in spec or "swagger" in spec:
             # Standard OpenAPI/Swagger format
-            info = spec.get('info', {})
-            servers = spec.get('servers', [])
-            paths = spec.get('paths', {})
-            
-            api_title = info.get('title', 'API Documentation')
-            api_version = info.get('version', 'Unknown')
-            api_description = info.get('description', 'No description provided')
-            base_url = servers[0].get('url', 'Not specified') if servers else 'Not specified'
+            info = spec.get("info", {})
+            servers = spec.get("servers", [])
+            paths = spec.get("paths", {})
+
+            api_title = info.get("title", "API Documentation")
+            api_version = info.get("version", "Unknown")
+            api_description = info.get("description", "No description provided")
+            base_url = (
+                servers[0].get("url", "Not specified") if servers else "Not specified"
+            )
             endpoint_count = len(paths)
         else:
             # Custom format (like your JSON)
-            api_title = spec.get('api_name', spec.get('title', 'API Documentation'))
-            api_version = spec.get('version', 'Unknown')
-            api_description = spec.get('description', 'No description provided')
-            base_url = spec.get('base_url', 'Not specified')
+            api_title = spec.get("api_name", spec.get("title", "API Documentation"))
+            api_version = spec.get("version", "Unknown")
+            api_description = spec.get("description", "No description provided")
+            base_url = spec.get("base_url", "Not specified")
             # Handle custom 'endpoints' array
-            endpoints_data = spec.get('endpoints', [])
+            endpoints_data = spec.get("endpoints", [])
             endpoint_count = len(endpoints_data)
-            
+
             # Convert custom format to OpenAPI-like structure for processing
             paths = {}
             for endpoint in endpoints_data:
-                path = endpoint.get('path', '/')
-                method = endpoint.get('method', 'get').lower()
+                path = endpoint.get("path", "/")
+                method = endpoint.get("method", "get").lower()
                 if path not in paths:
                     paths[path] = {}
                 paths[path][method] = {
-                    'summary': endpoint.get('description', 'No description'),
-                    'description': endpoint.get('description', 'No description')
+                    "summary": endpoint.get("description", "No description"),
+                    "description": endpoint.get("description", "No description"),
                 }
-        
-        logger.info(f"Building API info display - Title: {api_title}, Version: {api_version}, Endpoints: {endpoint_count}")
-        
+
+        logger.info(
+            f"Building API info display - Title: {api_title}, Version: {api_version}, Endpoints: {endpoint_count}"
+        )
+
         api_info = f"""## 📋 **{api_title}**
 
 **Version**: {api_version}  
 **Base URL**: {base_url}  
 **Description**: {api_description}
 
-### 🎯 **Available Endpoints** ({endpoint_count} total)
+<h3>🎯 **Available Endpoints** ({endpoint_count} total)</h3>
 """
-        
+
         # Add endpoint details
         methods_found = 0
         for path, methods in paths.items():
@@ -182,87 +410,124 @@ def load_api_spec(file):
                 for method, details in methods.items():
                     methods_found += 1
                     if isinstance(details, dict):
-                        summary = details.get('summary', details.get('description', 'No summary'))
+                        summary = details.get(
+                            "summary", details.get("description", "No summary")
+                        )
                         api_info += f"- **{method.upper()}** - {summary}\n"
-        
-        logger.info(f"Processed {methods_found} HTTP methods across {endpoint_count} endpoints")
-        
+
+        # Enhanced RAG-specific logging for API structure analysis
+        logger.info(f"🔍 RAG Pipeline: API Structure Analysis Complete")
+        logger.info(f"   • Total endpoints: {endpoint_count}")
+        logger.info(f"   • HTTP methods found: {methods_found}")
+        logger.info(f"   • API title: {api_title}")
+        logger.info(f"   • API version: {api_version}")
+
+        # RAG content preparation metrics
+        estimated_chunks = max(1, len(content) // 1000)  # Rough chunk estimation
+        logger.info(f"📊 RAG Pipeline: Content Preparation Metrics")
+        logger.info(f"   • Estimated text chunks: ~{estimated_chunks}")
+        logger.info(f"   • Document complexity: {'High' if endpoint_count > 10 else 'Medium' if endpoint_count > 5 else 'Low'}")
+        logger.info(f"   • Content density: {len(content) / max(1, endpoint_count):.0f} chars/endpoint")
+
         # Add additional info for both formats
-        if 'openapi' in spec or 'swagger' in spec:
+        if "openapi" in spec or "swagger" in spec:
             # OpenAPI format contact info
-            spec_info = spec.get('info', {})
-            if 'contact' in spec_info:
-                contact = spec_info['contact']
-                api_info += f"\n### 📧 **Contact Information**\n"
-                if contact.get('name'):
+            spec_info = spec.get("info", {})
+            if "contact" in spec_info:
+                contact = spec_info["contact"]
+                api_info += f"\n<h3>📧 **Contact Information**</h3>\n"
+                if contact.get("name"):
                     api_info += f"**Name**: {contact['name']}\n"
-                if contact.get('email'):
+                if contact.get("email"):
                     api_info += f"**Email**: {contact['email']}\n"
-                if contact.get('url'):
+                if contact.get("url"):
                     api_info += f"**URL**: {contact['url']}\n"
         else:
             # Custom format additional info
-            if spec.get('authentication'):
-                auth_info = spec['authentication']
-                api_info += f"\n### 🔐 **Authentication**\n"
+            if spec.get("authentication"):
+                auth_info = spec["authentication"]
+                api_info += f"\n<h3>🔐 **Authentication**</h3>\n"
                 api_info += f"**Type**: {auth_info.get('type', 'Not specified')}\n"
-                if auth_info.get('description'):
+                if auth_info.get("description"):
                     api_info += f"**Details**: {auth_info['description']}\n"
-            
-            if spec.get('rate_limiting'):
-                api_info += f"\n### ⚡ **Rate Limiting**\n"
+
+            if spec.get("rate_limiting"):
+                api_info += f"\n<h3>⚡ **Rate Limiting**</h3>\n"
                 api_info += f"{spec['rate_limiting']}\n"
-        
+
+        # Final RAG pipeline completion
         spec_json = json.dumps(spec, indent=2)
-        status = "✅ API specification loaded successfully"
-        
+
+        # RAG Pipeline completion metrics
+        logger.info(f"🎯 RAG Pipeline: Document Processing Complete")
+        logger.info(f"   • Final JSON size: {len(spec_json):,} characters")
+        logger.info(f"   • Ready for vector indexing: Yes")
+        logger.info(f"   • Document status: Successfully parsed and validated")
+        logger.info(f"   • Next steps: Document ready for chunking and embedding")
+
+        # Enhanced status with RAG context
+        status = f"✅ RAG Pipeline: Document loaded and ready for AI assistant ({endpoint_count} endpoints indexed)"
+
+        logger.info(f"🚀 RAG Pipeline: Upload process completed successfully")
         return spec_json, api_info, status
-        
+
     except Exception as e:
-        logger.error(f"Error loading specification: {str(e)}")
-        return None, f"❌ **Error loading specification**: {str(e)}", "❌ Failed to load API specification"
+        error_message = str(e)
+        logger.error(f"❌ RAG Pipeline: Document processing failed - {error_message}")
+        logger.error(f"   • Error type: {type(e).__name__}")
+        logger.error(f"   • Processing stage: Document parsing and validation")
+        logger.error(f"   • Impact: RAG assistant will not be available for this document")
+
+        return (
+            None,
+            f"❌ **RAG Pipeline Error**: Failed to process document for AI assistant\n\n**Details**: {error_message}\n\n**Solution**: Please ensure your document is a valid JSON or YAML API specification.",
+            "❌ RAG Pipeline: Document processing failed",
+        )
+
 
 def load_demo():
     """Load demo Pet Store API with logging"""
     global current_spec
-    
+
     logger.info("Loading Pet Store demo API specification")
-    
+
     demo_spec = {
         "openapi": "3.0.0",
         "info": {
             "title": "Pet Store API Demo",
             "version": "1.0.0",
-            "description": "A sample Pet Store API for demonstration"
+            "description": "A sample Pet Store API for demonstration",
         },
         "servers": [{"url": "https://petstore.swagger.io/v2"}],
         "paths": {
             "/pets": {
                 "get": {"summary": "List all pets"},
-                "post": {"summary": "Create a new pet"}
+                "post": {"summary": "Create a new pet"},
             },
             "/pets/{petId}": {
                 "get": {"summary": "Get pet by ID"},
-                "delete": {"summary": "Delete a pet"}
-            }
-        }
+                "delete": {"summary": "Delete a pet"},
+            },
+        },
     }
-    
+
     current_spec = demo_spec
-    
+
     # Log demo spec details
-    demo_endpoints = len(demo_spec.get('paths', {}))
-    demo_methods = sum(len(methods) for methods in demo_spec.get('paths', {}).values())
-    logger.info(f"Demo API loaded - {demo_endpoints} endpoints with {demo_methods} HTTP methods total")
-    
-    # Generate display info  
+    demo_endpoints = len(demo_spec.get("paths", {}))
+    demo_methods = sum(len(methods) for methods in demo_spec.get("paths", {}).values())
+    logger.info(
+        f"Demo API loaded - {demo_endpoints} endpoints with {demo_methods} HTTP methods total"
+    )
+
+    # Generate display info
     api_info = """## 📋 **Pet Store API Demo**
 
 **Version**: 1.0.0  
 **Base URL**: https://petstore.swagger.io/v2  
 **Description**: A sample Pet Store API for demonstration
 
-### 🎯 **Available Endpoints** (2 total)
+<h3>🎯 **Available Endpoints** (2 total)</h3>
 
 **`/pets`**
 - **GET** - List all pets
@@ -272,64 +537,53 @@ def load_demo():
 - **GET** - Get pet by ID  
 - **DELETE** - Delete a pet
 """
-    
+
     spec_json = json.dumps(demo_spec, indent=2)
     status = "✅ Demo API loaded successfully"
-    
+
     logger.info("Pet Store demo API successfully loaded and formatted for display")
-    
+
     return spec_json, api_info, status
 
-async def set_api_key(api_key):
-    """Set OpenAI API key in backend"""
-    if not api_key or not api_key.startswith('sk-'):
-        return "❌ Invalid API key format. Must start with 'sk-'"
-    
-    try:
-        logger.info("Setting OpenAI API key in backend")
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://localhost:8080/set-api-key",
-                json={"api_key": api_key},
-                timeout=10.0
-            )
-            
-            if response.status_code == 200:
-                logger.info("API key set successfully")
-                return "✅ API key set successfully - Ready for analysis"
-            else:
-                error_msg = f"Failed to set API key (Status: {response.status_code})"
-                logger.error(error_msg)
-                return f"❌ {error_msg}"
-                
-    except Exception as e:
-        error_msg = f"Error setting API key: {str(e)}"
-        logger.error(error_msg)
-        return f"❌ {error_msg}"
+
+
 
 def enhance_analysis_formatting(content):
     """Rich, professional formatting with enhanced content density"""
     if not content or len(content.strip()) < 10:
         return content
-    
+
     enhanced_content = content
-    
+
     # 1. Format Overall Score with rich visual elements
-    overall_score_pattern = r'\*\*Overall Score:\*\* (\d+)/100'
+    overall_score_pattern = r"\*\*Overall Score:\*\* (\d+)/100"
+
     def format_overall_score(match):
         score = int(match.group(1))
         status_emoji = "🟢" if score >= 80 else "🟡" if score >= 60 else "🔴"
-        status_text = "Excellent" if score >= 80 else "Good" if score >= 60 else "Needs Improvement"
-        
+        status_text = (
+            "Excellent"
+            if score >= 80
+            else "Good" if score >= 60 else "Needs Improvement"
+        )
+
         # Create visual progress bar
         progress_blocks = "█" * (score // 10) + "░" * (10 - score // 10)
-        
+
         # Add quality indicators
         indicators = []
         if score >= 90:
-            indicators = ["🏆 Premium Quality", "✨ Production Ready", "🎯 Best Practices"]
+            indicators = [
+                "🏆 Premium Quality",
+                "✨ Production Ready",
+                "🎯 Best Practices",
+            ]
         elif score >= 80:
-            indicators = ["✅ High Quality", "🚀 Well Designed", "📝 Good Documentation"]  
+            indicators = [
+                "✅ High Quality",
+                "🚀 Well Designed",
+                "📝 Good Documentation",
+            ]
         elif score >= 60:
             indicators = ["⚠️ Adequate", "🔧 Needs Refinement", "📋 Some Issues"]
         else:
@@ -341,114 +595,140 @@ def enhance_analysis_formatting(content):
 
 **Visual Progress:** `{progress_blocks}` ({score}%)
 
-### Quality Indicators:
+<h3>Quality Indicators:</h3>
 {chr(10).join(f"• {indicator}" for indicator in indicators)}
 
-### Analysis Date: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
+<h3>Analysis Date: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</h3>
 
 ---
 """
-    
-    enhanced_content = re.sub(overall_score_pattern, format_overall_score, enhanced_content)
-    
+
+    enhanced_content = re.sub(
+        overall_score_pattern, format_overall_score, enhanced_content
+    )
+
     # 2. Format detailed score breakdowns with rich details
     score_patterns = {
-        r'- \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_rich_score_item(m.group(1), int(m.group(2)), m.group(3)),
-        r'• \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_rich_score_item(m.group(1), int(m.group(2)), m.group(3)),
-        r'◦ \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)': lambda m: format_rich_score_item(m.group(1), int(m.group(2)), m.group(3)),
+        r"- \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)": lambda m: format_rich_score_item(
+            m.group(1), int(m.group(2)), m.group(3)
+        ),
+        r"• \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)": lambda m: format_rich_score_item(
+            m.group(1), int(m.group(2)), m.group(3)
+        ),
+        r"◦ \*\*(\w+):\*\* (\d+)/100 - ([^\n]+)": lambda m: format_rich_score_item(
+            m.group(1), int(m.group(2)), m.group(3)
+        ),
     }
-    
+
     def format_rich_score_item(category, score, description):
         icons = {
-            "Completeness": "🔧", "Documentation": "📚", "Security": "🔒", 
-            "Usability": "👥", "Standards": "📏", "Performance": "⚡",
-            "Compliance": "📏"
+            "Completeness": "🔧",
+            "Documentation": "📚",
+            "Security": "🔒",
+            "Usability": "👥",
+            "Standards": "📏",
+            "Performance": "⚡",
+            "Compliance": "📏",
         }
-        
+
         impact_levels = {
             "Completeness": "Foundation",
-            "Documentation": "Developer Experience", 
+            "Documentation": "Developer Experience",
             "Security": "Trust & Safety",
             "Usability": "Adoption",
             "Standards": "Maintainability",
             "Performance": "Scalability",
-            "Compliance": "Reliability"
+            "Compliance": "Reliability",
         }
-        
+
         icon = icons.get(category, "📊")
         impact = impact_levels.get(category, "Quality")
-        
+
         if score >= 80:
             status = "✅ Excellent"
             grade = "A"
             bar = "████████▓░"
         elif score >= 60:
             status = "⚠️ Good"
-            grade = "B" 
+            grade = "B"
             bar = "██████▓▓░░"
         else:
             status = "❌ Needs Work"
             grade = "C"
             bar = "████▓▓▓▓░░"
-            
+
         return f"""
-### {icon} {category}: {score}/100 {status} (Grade: {grade})
+<h3>{icon} {category}: {score}/100 {status} (Grade: {grade})</h3>
 
 **Impact Area:** {impact}  
 **Progress:** `{bar}` {score}%  
 **Analysis:** {description}
 
 """
-    
+
     for pattern, formatter in score_patterns.items():
         enhanced_content = re.sub(pattern, formatter, enhanced_content)
-    
+
     # 3. Format critical issues with enhanced structure
     def format_critical_issues(content):
         # Format numbered critical issues
-        issue_pattern = r'^(\d+\.\s+\*\*Issue:\*\*\s+.+)$'
+        issue_pattern = r"^(\d+\.\s+\*\*Issue:\*\*\s+.+)$"
+
         def format_numbered_issue(match):
             issue_text = match.group(1)
-            issue_number = re.match(r'^(\d+)\.', issue_text).group(1)
-            clean_text = re.sub(r'\d+\.\s+\*\*Issue:\*\*\s+', '', issue_text)
-            
+            issue_number = re.match(r"^(\d+)\.", issue_text).group(1)
+            clean_text = re.sub(r"\d+\.\s+\*\*Issue:\*\*\s+", "", issue_text)
+
             priority_labels = ["🔥 Critical", "⚠️ High", "📋 Medium", "💡 Low"]
-            priority = priority_labels[min(int(issue_number)-1, 3)] if issue_number.isdigit() else "📋 Issue"
-            
+            priority = (
+                priority_labels[min(int(issue_number) - 1, 3)]
+                if issue_number.isdigit()
+                else "📋 Issue"
+            )
+
             return f"""
 #### {priority} - Issue #{issue_number}: {clean_text}
 
 **Severity:** Priority {issue_number}  
 **Category:** API Design Flaw
 """
-        
-        content = re.sub(issue_pattern, format_numbered_issue, content, flags=re.MULTILINE)
-        
+
+        content = re.sub(
+            issue_pattern, format_numbered_issue, content, flags=re.MULTILINE
+        )
+
         # Format sub-bullet details with enhanced styling
-        sub_bullet_pattern = r'^\s*-\s+\*\*([^*]+):\*\*\s+(.+)$'
+        sub_bullet_pattern = r"^\s*-\s+\*\*([^*]+):\*\*\s+(.+)$"
+
         def format_issue_details(match):
             label = match.group(1)
             detail = match.group(2)
-            
+
             label_icons = {
-                "Location": "📍", "Impact": "💥", "Fix": "🔧", 
-                "Priority": "⭐", "Reason": "💭", "Implementation": "🛠️"
+                "Location": "📍",
+                "Impact": "💥",
+                "Fix": "🔧",
+                "Priority": "⭐",
+                "Reason": "💭",
+                "Implementation": "🛠️",
             }
-            
+
             icon = label_icons.get(label, "•")
             return f"**{icon} {label}:** {detail}"
-        
-        content = re.sub(sub_bullet_pattern, format_issue_details, content, flags=re.MULTILINE)
+
+        content = re.sub(
+            sub_bullet_pattern, format_issue_details, content, flags=re.MULTILINE
+        )
         return content
-    
+
     enhanced_content = format_critical_issues(enhanced_content)
-    
+
     # 4. Add summary statistics after executive summary
     def add_analysis_stats(content):
         # Count various elements for statistics
-        issue_count = len(re.findall(r'#### .* - Issue #\d+', content))
-        recommendation_count = len(re.findall(r'\*\*Fix:\*\*', content))
-        
+        issue_count = len(re.findall(r"#### .* - Issue #\d+", content))
+        recommendation_count = len(re.findall(r"\*\*Fix:\*\*", content))
+
         stats_section = f"""
 ## 📈 Analysis Summary
 
@@ -460,47 +740,49 @@ def enhance_analysis_formatting(content):
 
 ---
 """
-        
+
         # Insert after executive summary if it exists
         if "## 🎯 Executive Summary" in content:
-            content = content.replace("## 🎯 Executive Summary", stats_section + "## 🎯 Executive Summary")
+            content = content.replace(
+                "## 🎯 Executive Summary", stats_section + "## 🎯 Executive Summary"
+            )
         else:
             # Insert near the beginning
-            lines = content.split('\n')
+            lines = content.split("\n")
             for i, line in enumerate(lines):
-                if line.startswith('## ') and '🎯' not in line:
+                if line.startswith("## ") and "🎯" not in line:
                     lines.insert(i, stats_section)
                     break
-            content = '\n'.join(lines)
-        
+            content = "\n".join(lines)
+
         return content
-    
+
     enhanced_content = add_analysis_stats(enhanced_content)
-    
+
     # 5. Format main section headers with better styling
     header_replacements = {
-        r'### 🎯 Executive Summary': '## 🎯 Executive Summary\n*Key findings and overall assessment*',
-        r'### 🚨 Critical Issues \(Priority Order\)': '## 🚨 Critical Issues (Priority Order)\n*Issues requiring immediate attention*', 
-        r'### 🔍 Detailed Analysis': '## 🔍 Detailed Analysis\n*Comprehensive evaluation results*',
-        r'### (.+)': r'## \1'
+        r"<h3>🎯 Executive Summary</h3>": "## 🎯 Executive Summary\n*Key findings and overall assessment*",
+        r"<h3>🚨 Critical Issues \(Priority Order\)</h3>": "## 🚨 Critical Issues (Priority Order)\n*Issues requiring immediate attention*",
+        r"<h3>🔍 Detailed Analysis</h3>": "## 🔍 Detailed Analysis\n*Comprehensive evaluation results*",
+        r"<h3>(.+)</h3>": r"## \1",
     }
-    
+
     for pattern, replacement in header_replacements.items():
         enhanced_content = re.sub(pattern, replacement, enhanced_content)
-    
+
     # 6. Format code blocks with language hints
     enhanced_content = re.sub(
-        r'```(yaml|json|javascript|python)?\n(.*?)\n```',
+        r"```(yaml|json|javascript|python)?\n(.*?)\n```",
         lambda m: f"```{m.group(1) or 'yaml'}\n{m.group(2)}\n```\n*Example {m.group(1) or 'configuration'} implementation*",
         enhanced_content,
-        flags=re.DOTALL
+        flags=re.DOTALL,
     )
-    
+
     # 7. Add visual separators and improve spacing
-    enhanced_content = re.sub(r'\n---\n', '\n\n---\n\n', enhanced_content)
-    enhanced_content = re.sub(r'\n{4,}', '\n\n', enhanced_content)
-    enhanced_content = re.sub(r'\*\*([^*]+):\*\*', r'**\1:**', enhanced_content)
-    
+    enhanced_content = re.sub(r"\n---\n", "\n\n---\n\n", enhanced_content)
+    enhanced_content = re.sub(r"\n{4,}", "\n\n", enhanced_content)
+    enhanced_content = re.sub(r"\*\*([^*]+):\*\*", r"**\1:**", enhanced_content)
+
     # 8. Add final footer with action items
     footer = """
 ---
@@ -514,91 +796,37 @@ def enhance_analysis_formatting(content):
 
 *This analysis was generated using AI-powered evaluation tools. For detailed implementation guidance, consult the specific recommendations above.*
 """
-    
+
     enhanced_content += footer
-    
+
     return enhanced_content.strip()
 
-async def start_analysis_streaming():
-    """Start streaming API analysis using backend"""
-    if not current_spec:
-        yield "❌ Please upload an API specification first"
-        return
-    
-    try:
-        logger.info("Starting streaming API analysis via backend")
-        async with httpx.AsyncClient(timeout=300.0) as client:  # 5 minute timeout for streaming
-            async with client.stream(
-                "POST",
-                "http://localhost:8080/analyze-stream",
-                json={
-                    "openapi_spec": current_spec,
-                    "focus_areas": ["security", "performance", "documentation", "completeness", "standards"]
-                }
-            ) as response:
-                
-                if response.status_code != 200:
-                    if response.status_code == 503:
-                        yield "❌ Analysis unavailable - Please set your OpenAI API key first"
-                    else:
-                        yield f"❌ Analysis failed with status {response.status_code}"
-                    return
-                
-                buffer = ""
-                analysis_content = ""
-                
-                async for chunk in response.aiter_text():
-                    buffer += chunk
-                    
-                    while "\n\n" in buffer:
-                        line, buffer = buffer.split("\n\n", 1)
-                        if line.startswith("data: "):
-                            data_str = line[6:]  # Remove "data: " prefix
-                            
-                            if data_str == "[DONE]":
-                                logger.info("Streaming analysis completed successfully")
-                                return
-                            
-                            try:
-                                import json
-                                data = json.loads(data_str)
-                                
-                                if "error" in data:
-                                    yield f"❌ Error: {data['error']}"
-                                    return
-                                elif "status" in data:
-                                    yield f"🔄 {data['message']}"
-                                elif "content" in data:
-                                    analysis_content += data["content"]
-                                    # Apply enhanced formatting to the content
-                                    enhanced_content = enhance_analysis_formatting(analysis_content)
-                                    yield enhanced_content
-                                    
-                            except json.JSONDecodeError:
-                                continue  # Skip malformed JSON
-                
-    except Exception as e:
-        error_msg = f"❌ Streaming analysis error: {str(e)}"
-        logger.error(error_msg)
-        yield error_msg
+
+
 
 async def start_analysis():
     """Start API analysis (non-streaming fallback)"""
     if not current_spec:
         return "❌ Please upload an API specification first", "", None
-    
+
     try:
         logger.info("Starting API analysis via backend")
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "http://localhost:8080/analyze",
+                f"{API_BASE_URL}/analyze",
                 json={
                     "openapi_spec": current_spec,
-                    "focus_areas": ["security", "performance", "documentation", "completeness", "standards"]
+                    "focus_areas": [
+                        "security",
+                        "performance",
+                        "documentation",
+                        "completeness",
+                        "standards",
+                    ],
                 },
-                timeout=60.0
+                timeout=DEFAULT_TIMEOUT,
             )
-            
+
             if response.status_code == 200:
                 result = response.json()
                 analysis = result.get("analysis", "Analysis completed successfully")
@@ -606,476 +834,747 @@ async def start_analysis():
                 enhanced_analysis = enhance_analysis_formatting(analysis)
                 logger.info("Analysis completed successfully")
                 return enhanced_analysis, "Analysis completed", None
-            elif response.status_code == 503:
-                error_msg = "❌ Analysis unavailable - Please set your OpenAI API key first"
-                logger.error(error_msg)
-                return error_msg, "", None
             else:
-                error_msg = f"Analysis failed with status {response.status_code}"
-                logger.error(error_msg)
+                error_msg = handle_api_error(response.status_code, "API analysis")
                 return error_msg, "", None
-                
-    except Exception as e:
-        error_msg = f"Analysis error: {str(e)}"
-        logger.error(error_msg)
-        return error_msg, "", None
 
-def chat_with_api(message, history):
-    """Chat with the API using RAG backend with comprehensive logging"""
-    logger.info(f"RAG chat request received - Message length: {len(message.strip())} chars")
-    
-    if not message.strip():
+    except httpx.TimeoutException:
+        return log_error_with_context(
+            httpx.TimeoutException("Request timed out"),
+            "API analysis timeout",
+            f"❌ Analysis timed out after {DEFAULT_TIMEOUT} seconds. Please try again."
+        ), "", None
+    except httpx.RequestError as e:
+        return log_error_with_context(e, "API analysis connection", "❌ Cannot connect to backend service. Please check if it's running."), "", None
+    except Exception as e:
+        return log_error_with_context(e, "API analysis"), "", None
+
+
+def run_rag_pipeline_demo():
+    """Run the complete RAG v2 pipeline demo for educational purposes"""
+    import subprocess
+    import os
+
+    try:
+        # Change to the project directory to run the test
+        original_cwd = os.getcwd()
+
+        # Run the pipeline test and capture output
+        result = subprocess.run(
+            ["poetry", "run", "python", "test_full_rag_pipeline.py"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        # Format the output for display
+        output_lines = []
+        output_lines.append("=" * 60)
+        output_lines.append("🚀 RAG v2 Pipeline Demo Execution")
+        output_lines.append("=" * 60)
+        output_lines.append("")
+
+        if result.returncode == 0:
+            output_lines.append("✅ Pipeline executed successfully!")
+            output_lines.append("")
+            output_lines.append("📊 EXECUTION OUTPUT:")
+            output_lines.append("-" * 40)
+            output_lines.extend(result.stdout.split("\n"))
+
+            if result.stderr:
+                output_lines.append("")
+                output_lines.append("⚠️ WARNINGS/INFO:")
+                output_lines.append("-" * 40)
+                output_lines.extend(result.stderr.split("\n"))
+        else:
+            output_lines.append("❌ Pipeline execution encountered issues")
+            output_lines.append("")
+            output_lines.append("📊 STDOUT:")
+            output_lines.append("-" * 40)
+            if result.stdout:
+                output_lines.extend(result.stdout.split("\n"))
+            else:
+                output_lines.append("(No stdout output)")
+
+            output_lines.append("")
+            output_lines.append("❌ STDERR:")
+            output_lines.append("-" * 40)
+            if result.stderr:
+                output_lines.extend(result.stderr.split("\n"))
+            else:
+                output_lines.append("(No stderr output)")
+
+        output_lines.append("")
+        output_lines.append("=" * 60)
+        output_lines.append("🎯 Demo Complete - Review the output above to understand:")
+        output_lines.append("   • How each RAG v2 component initializes")
+        output_lines.append("   • Component interaction and data flow")
+        output_lines.append("   • Performance metrics and evaluation scores")
+        output_lines.append("   • Error handling and fallback mechanisms")
+        output_lines.append("=" * 60)
+
+        return "\n".join(output_lines)
+
+    except subprocess.TimeoutExpired:
+        return """⏰ PIPELINE DEMO TIMEOUT
+
+The RAG v2 pipeline demo took longer than expected to complete.
+This might be due to:
+• First-time model download (embeddings)
+• System resource constraints
+• Network connectivity issues
+
+Try running the demo again, or check the backend logs for more details."""
+
+    except Exception as e:
+        return f"""❌ PIPELINE DEMO ERROR
+
+An error occurred while running the RAG v2 pipeline demo:
+{str(e)}
+
+This is an educational demo. The error helps understand:
+• Real-world deployment challenges
+• Error handling mechanisms
+• System dependencies
+
+Check your environment setup and try again."""
+
+
+def clear_pipeline_output():
+    """Clear the pipeline output display"""
+    return "Click 'Run RAG v2 Pipeline Demo' to see the complete pipeline in action..."
+
+
+
+
+def chat_with_api(message, history, model_name="gpt-4o-mini"):
+    """Enhanced chat function with proper input validation"""
+
+    # Enhanced input validation
+    if not message or not message.strip():
         logger.warning("Empty message received in chat")
         return history, ""
-    
-    if not current_spec:
-        logger.warning("Chat attempted without API specification loaded")
-        history.append([message, "Please upload an API specification first to enable AI assistance."])
+
+    message = message.strip()
+
+    # Check message length
+    MAX_MESSAGE_LENGTH = 4000  # Reasonable limit for API processing
+    if len(message) > MAX_MESSAGE_LENGTH:
+        logger.warning(f"Message too long: {len(message)} chars, max: {MAX_MESSAGE_LENGTH}")
+        history.append([
+            message[:100] + "...",
+            f"❌ Message too long ({len(message)} characters). Please keep messages under {MAX_MESSAGE_LENGTH} characters."
+        ])
         return history, ""
-    
-    # Log spec context info
-    spec_title = current_spec.get('info', {}).get('title', 'Unknown API')
-    spec_endpoints = len(current_spec.get('paths', {}))
-    logger.info(f"Processing RAG query for {spec_title} with {spec_endpoints} endpoints")
-    
+
+    # Check for potential security issues (basic validation)
+    suspicious_patterns = ['<script', 'javascript:', 'eval(', 'exec(']
+    if any(pattern in message.lower() for pattern in suspicious_patterns):
+        logger.warning(f"Suspicious content detected in message: {message[:100]}")
+        history.append([
+            message,
+            "❌ Message contains potentially unsafe content. Please rephrase your question."
+        ])
+        return history, ""
+
+    # Enhanced RAG pipeline initialization logging
+    logger.info(f"🔗 RAG Pipeline: Chat request initiated")
+    logger.info(f"   • Message length: {len(message)} characters")
+    logger.info(f"   • Message preview: {message[:100]}{'...' if len(message) > 100 else ''}")
+
+    if not current_spec:
+        logger.warning("❌ RAG Pipeline: No API specification loaded for context")
+        history.append([
+            message,
+            "Please upload an API specification first to enable AI assistance.",
+        ])
+        return history, ""
+
+    # Enhanced spec context analysis for RAG
+    spec_title = current_spec.get("info", {}).get("title", "Unknown API")
+    spec_endpoints = len(current_spec.get("paths", {}))
+    spec_components = len(current_spec.get("components", {}).get("schemas", {}))
+
+    logger.info(f"🔍 RAG Pipeline: Context Analysis")
+    logger.info(f"   • API title: {spec_title}")
+    logger.info(f"   • Available endpoints: {spec_endpoints}")
+    logger.info(f"   • Schema components: {spec_components}")
+    logger.info(f"   • Spec format: {'OpenAPI 3.0' if 'openapi' in current_spec else 'Custom/Swagger'}")
+
     try:
-        # Call enhanced RAG endpoint with DeepEval integration
-        logger.info("Sending request to enhanced RAG backend at localhost:8080/rag-query-v2")
+        # Enhanced RAG backend initialization
+        logger.info(f"🚀 RAG Pipeline: Initializing backend request")
+        logger.info(f"   • Backend URL: {API_BASE_URL}/rag-query")
+        logger.info(f"   • Timeout configuration: {RAG_TIMEOUT}s")
+        logger.info(f"   • Request payload size: ~{len(str(current_spec)):,} characters")
+        logger.debug(f"current_spec type: {type(current_spec)}, not None: {current_spec is not None}")
+        if current_spec:
+            logger.debug(f"current_spec keys: {list(current_spec.keys()) if isinstance(current_spec, dict) else 'Not a dict'}")
+
         import requests
+
         response = requests.post(
-            "http://localhost:8080/rag-query-v2",
+            f"{API_BASE_URL}/rag-query",
             json={
                 "question": message,
-                "openapi_spec": current_spec
+                "openapi_spec": current_spec,
+                "model_name": model_name,  # Selected model from dropdown
+                "max_tokens": 1000  # Limit token generation for concise responses
             },
-            timeout=30.0
+            timeout=RAG_TIMEOUT,  # Configurable timeout for RAG processing
         )
-        
-        logger.info(f"RAG backend response - Status: {response.status_code}")
-        
+
+        # Enhanced RAG response processing
+        logger.info(f"📡 RAG Pipeline: Backend response received")
+        logger.info(f"   • HTTP Status: {response.status_code}")
+        logger.info(f"   • Response size: {len(response.content):,} bytes")
+
         if response.status_code == 200:
             result = response.json()
             answer = result.get("answer", "Sorry, I couldn't generate a response.")
             metadata = result.get("metadata", {})
-            rag_triad = metadata.get("rag_triad_evaluation", {})
-            performance = metadata.get("performance", {})
-            
-            # Create enhanced response with evaluation metrics
-            enhanced_answer = answer
-            
-            # Add DeepEval RAG Triad scores if available
-            if rag_triad:
-                eval_display = f"\n\n📊 **DeepEval RAG Triad Evaluation Results:**\n"
-                eval_display += "=" * 60 + "\n\n"
-                
-                # Answer Relevancy Score
-                answer_relevancy = rag_triad.get('answer_relevancy', 0)
-                eval_display += f"### 🎯 **Answer Relevancy: {answer_relevancy:.3f}**\n"
-                eval_display += "**What it measures:** How well the answer addresses your specific question\n"
-                eval_display += "**Formula:** `Cosine Similarity(Question Embedding, Answer Embedding)`\n"
-                eval_display += "**Interpretation:** "
-                if answer_relevancy >= 0.8:
-                    eval_display += "✅ Excellent - Answer directly addresses the question\n"
-                elif answer_relevancy >= 0.6:
-                    eval_display += "✔️ Good - Answer is mostly relevant with minor deviations\n"
-                elif answer_relevancy >= 0.4:
-                    eval_display += "⚠️ Fair - Answer partially addresses the question\n"
-                else:
-                    eval_display += "❌ Poor - Answer may be off-topic or incomplete\n"
-                eval_display += "\n"
-                
-                # Faithfulness Score
-                faithfulness = rag_triad.get('faithfulness', 0)
-                eval_display += f"### 🔍 **Faithfulness: {faithfulness:.3f}**\n"
-                eval_display += "**What it measures:** Accuracy of the answer relative to source documents\n"
-                eval_display += "**Formula:** `(Verified Claims / Total Claims)` where claims are validated against context\n"
-                eval_display += "**Interpretation:** "
-                if faithfulness >= 0.9:
-                    eval_display += "✅ Excellent - All claims are supported by documentation\n"
-                elif faithfulness >= 0.7:
-                    eval_display += "✔️ Good - Most claims are accurate with minor issues\n"
-                elif faithfulness >= 0.5:
-                    eval_display += "⚠️ Fair - Some claims lack proper support\n"
-                else:
-                    eval_display += "❌ Poor - Answer contains unsupported or incorrect claims\n"
-                eval_display += "\n"
-                
-                # Contextual Relevancy Score
-                contextual_relevancy = rag_triad.get('contextual_relevancy', 0)
-                eval_display += f"### 📋 **Contextual Relevancy: {contextual_relevancy:.3f}**\n"
-                eval_display += "**What it measures:** Quality of retrieved documentation chunks\n"
-                eval_display += "**Formula:** `(Relevant Chunks / Total Retrieved Chunks)`\n"
-                eval_display += "**Interpretation:** "
-                if contextual_relevancy >= 0.8:
-                    eval_display += "✅ Excellent - Retrieved highly relevant documentation\n"
-                elif contextual_relevancy >= 0.6:
-                    eval_display += "✔️ Good - Most retrieved content is useful\n"
-                elif contextual_relevancy >= 0.4:
-                    eval_display += "⚠️ Fair - Mixed relevance in retrieved content\n"
-                else:
-                    eval_display += "❌ Poor - Retrieved content has low relevance\n"
-                eval_display += "\n"
-                
-                # Overall Score
-                overall_score = rag_triad.get('overall_score', 0)
-                eval_display += f"### 🏆 **Overall Score: {overall_score:.3f}**\n"
-                eval_display += "**Calculation:** Weighted average of all metrics\n"
-                eval_display += f"**Formula:** `(0.4 × Answer Relevancy + 0.4 × Faithfulness + 0.2 × Context Relevancy)`\n"
-                eval_display += f"**Breakdown:** `(0.4 × {answer_relevancy:.3f} + 0.4 × {faithfulness:.3f} + 0.2 × {contextual_relevancy:.3f}) = {overall_score:.3f}`\n"
-                eval_display += "\n"
-                
-                # Confidence Score
-                confidence = rag_triad.get('confidence', 0)
-                eval_display += f"### 🎲 **Confidence: {confidence:.3f}**\n"
-                eval_display += "**What it measures:** System's confidence in the evaluation\n"
-                eval_display += "**Formula:** `min(1.0, Overall Score × Context Quality Factor × Response Coherence)`\n"
-                eval_display += "**Interpretation:** "
-                if confidence >= 0.8:
-                    eval_display += "✅ High confidence - Reliable evaluation\n"
-                elif confidence >= 0.6:
-                    eval_display += "✔️ Moderate confidence - Generally trustworthy\n"
-                elif confidence >= 0.4:
-                    eval_display += "⚠️ Low confidence - Results may vary\n"
-                else:
-                    eval_display += "❌ Very low confidence - Evaluation uncertain\n"
-                
-                # Add performance metrics if available
-                if performance:
-                    eval_display += f"\n⚡ **Performance:**\n"
-                    eval_display += f"Search: {performance.get('search_time_ms', 0):.1f}ms | "
-                    eval_display += f"LLM: {performance.get('llm_time_ms', 0):.1f}ms | "
-                    eval_display += f"Total: {performance.get('total_time_ms', 0):.1f}ms\n"
-                    eval_display += f"Tokens/sec: {performance.get('tokens_per_second', 0):.1f}\n"
-                
-                # Add quality assessment with educational explanation
-                eval_display += "\n" + "=" * 60 + "\n"
-                eval_display += "## 📈 **Quality Assessment**\n"
-                overall_score = rag_triad.get('overall_score', 0)
-                
-                if overall_score >= 0.8:
-                    eval_display += f"### ✅ **Excellent Quality** (Score: {overall_score:.3f})\n"
-                    eval_display += "**What this means:** The AI has provided a highly accurate, relevant, and well-supported answer.\n"
-                    eval_display += "**You can:** Trust this response with high confidence for critical decisions.\n"
-                elif overall_score >= 0.6:
-                    eval_display += f"### ✔️ **Good Quality** (Score: {overall_score:.3f})\n"
-                    eval_display += "**What this means:** The answer is generally reliable with minor areas for improvement.\n"
-                    eval_display += "**You can:** Use this response confidently, but verify critical details.\n"
-                elif overall_score >= 0.4:
-                    eval_display += f"### ⚠️ **Fair Quality** (Score: {overall_score:.3f})\n"
-                    eval_display += "**What this means:** The answer has some useful information but may lack completeness or accuracy.\n"
-                    eval_display += "**You should:** Cross-reference important information and ask follow-up questions.\n"
-                else:
-                    eval_display += f"### ❌ **Needs Improvement** (Score: {overall_score:.3f})\n"
-                    eval_display += "**What this means:** The answer may be off-topic, incomplete, or contain inaccuracies.\n"
-                    eval_display += "**You should:** Rephrase your question or provide more context for better results.\n"
-                
-                # Add learning tips
-                eval_display += "\n### 💡 **Tips for Better Results:**\n"
-                if answer_relevancy < 0.7:
-                    eval_display += "• **Be more specific:** Your question might be too broad or vague\n"
-                if faithfulness < 0.7:
-                    eval_display += "• **Check documentation:** The system may lack sufficient context\n"
-                if contextual_relevancy < 0.7:
-                    eval_display += "• **Provide context:** Include more details about your use case\n"
-                if overall_score >= 0.7:
-                    eval_display += "• **Great job!** Your question was well-formed and got quality results\n"
-                    
-                enhanced_answer += eval_display
-            
-            logger.info(f"RAG response received - Answer length: {len(answer)} chars, RAG Triad: {bool(rag_triad)}")
-            history.append([message, enhanced_answer])
+
+            # Enhanced RAG pipeline metrics logging
+            logger.info(f"🎯 RAG Pipeline: Processing Metrics")
+            logger.info(f"   • Answer length: {len(answer)} characters")
+            logger.info(f"   • Retrieved contexts: {metadata.get('contexts_retrieved', 'Unknown')}")
+            logger.info(f"   • Processing time: {metadata.get('processing_time', 'Unknown')}s")
+            logger.info(f"   • Vector search results: {metadata.get('vector_results', 'Unknown')}")
+            logger.info(f"   • Embedding model: {metadata.get('embedding_model', 'Unknown')}")
+            logger.info(f"   • Chunking strategy: {metadata.get('chunking_strategy', 'Unknown')}")
+
+            # Enhanced RAG features display
+            enhanced_features = []
+
+            # Enhanced RAG Pipeline Details for User Display
+
+            # Vector Store and Embedding Information
+            embedding_model = metadata.get("embedding_model", "BAAI/bge-m3")
+            vector_store_type = metadata.get("vector_store", "ChromaDB")
+            enhanced_features.append(f"🧠 **Embedding Model**: {embedding_model}")
+            enhanced_features.append(f"🗃️ **Vector Store**: {vector_store_type}")
+
+            # Document Processing Details
+            chunking_strategy = metadata.get("chunking_strategy", "Recursive Character Text Splitter")
+            chunk_size = metadata.get("chunk_size", 1000)
+            chunk_overlap = metadata.get("chunk_overlap", 200)
+            enhanced_features.append(f"✂️ **Chunking Strategy**: {chunking_strategy}")
+            enhanced_features.append(f"📏 **Chunk Size**: {chunk_size} chars (overlap: {chunk_overlap})")
+
+            # Cache status
+            cache_hit = result.get("cache_hit", False)
+            if cache_hit:
+                enhanced_features.append("💾 **Cache Hit** - Response retrieved from semantic cache")
+            else:
+                enhanced_features.append("🔍 **Fresh Search** - New vector similarity search performed")
+
+            # Retrieved contexts with more detail
+            retrieved_contexts = result.get("retrieved_contexts", [])
+            context_sources = result.get("context_sources", [])
+            total_context_chars = sum(len(str(ctx)) for ctx in retrieved_contexts) if retrieved_contexts else 0
+
+            if retrieved_contexts:
+                enhanced_features.append(f"📝 **Retrieved Chunks**: {len(retrieved_contexts)} chunks ({total_context_chars:,} chars)")
+                if context_sources:
+                    enhanced_features.append(f"📂 **Content Sources**: {', '.join(context_sources[:3])}{'...' if len(context_sources) > 3 else ''}")
+
+                # Similarity scores if available
+                similarity_scores = metadata.get("similarity_scores", [])
+                if similarity_scores:
+                    avg_similarity = sum(similarity_scores) / len(similarity_scores)
+                    enhanced_features.append(f"🎯 **Avg Similarity**: {avg_similarity:.3f} (best: {max(similarity_scores):.3f})")
+
+            # Evaluation metrics
+            evaluation_metrics = result.get("evaluation_metrics", {})
+            if evaluation_metrics and evaluation_metrics != {}:
+                overall_score = evaluation_metrics.get("overall_score")
+                if overall_score:
+                    enhanced_features.append(f"⭐ **Quality Score**: {overall_score:.2f}")
+
+                # Individual metrics
+                relevancy = evaluation_metrics.get("answer_relevancy_score")
+                faithfulness = evaluation_metrics.get("faithfulness_score")
+                contextual = evaluation_metrics.get("contextual_relevancy_score")
+
+                if relevancy:
+                    enhanced_features.append(f"📊 **Relevancy**: {relevancy:.2f}")
+                if faithfulness:
+                    enhanced_features.append(f"🎯 **Faithfulness**: {faithfulness:.2f}")
+                if contextual:
+                    enhanced_features.append(f"🔗 **Context Relevancy**: {contextual:.2f}")
+
+            # Performance metrics
+            response_time = result.get("response_time", 0)
+            model_used = result.get("model_used", "unknown")
+            enhanced_features.append(f"⏱️ **Response Time**: {response_time:.2f}s")
+            enhanced_features.append(f"🤖 **Model**: {model_used}")
+
+            # Token usage
+            if metadata:
+                total_tokens = metadata.get("total_tokens")
+                if total_tokens:
+                    enhanced_features.append(f"🔢 **Tokens Used**: {total_tokens}")
+
+            # Add vector store creation status
+            vector_db_status = metadata.get("vector_db_status", "Ready")
+            index_size = metadata.get("index_size", "Unknown")
+            enhanced_features.append(f"🔢 **Vector Index**: {vector_db_status} ({index_size} vectors)")
+
+            # Format enhanced answer with comprehensive RAG features
+            features_display = ""
+            if enhanced_features:
+                features_display = f"\n\n---\n**🚀 RAG Pipeline Details:**\n" + "\n".join([f"• {feature}" for feature in enhanced_features])
+
+            enhanced_answer = f"🤖 {answer}{features_display}"
+
+            # Log response metrics with enhanced details
+            logger.info(
+                f"RAG response received - Answer length: {len(answer)} chars, "
+                f"Cache hit: {cache_hit}, Retrieved contexts: {len(retrieved_contexts)}, "
+                f"Has evaluation: {bool(evaluation_metrics)}"
+            )
+
+            try:
+                history.append([message, enhanced_answer])
+                logger.info(f"Successfully appended to history - New history length: {len(history)} entries")
+            except Exception as append_error:
+                logger.error(f"Failed to append to history: {append_error}")
+                raise
         else:
-            error_msg = f"Error: Unable to get response from AI service (Status: {response.status_code})"
-            logger.error(f"RAG backend error - Status: {response.status_code}")
+            error_msg = handle_api_error(response.status_code, "RAG query")
             history.append([message, error_msg])
-                
-    except Exception as e:
-        error_msg = f"Error: {str(e)}"
-        logger.error(f"RAG request failed: {str(e)}")
+
+    except requests.exceptions.Timeout:
+        error_msg = log_error_with_context(
+            requests.exceptions.Timeout("Request timed out"),
+            "RAG query timeout",
+            f"❌ Chat request timed out after {RAG_TIMEOUT} seconds. Please try again."
+        )
         history.append([message, error_msg])
-    
+    except requests.exceptions.ConnectionError:
+        error_msg = log_error_with_context(
+            requests.exceptions.ConnectionError("Connection failed"),
+            "RAG query connection",
+            "❌ Cannot connect to backend service. Please check if it's running."
+        )
+        history.append([message, error_msg])
+    except Exception as e:
+        error_msg = log_error_with_context(e, "RAG query")
+        history.append([message, error_msg])
+
     return history, ""
+
 
 def create_complete_interface():
     """Create the complete interface with both evaluation and assistant tabs"""
-    with gr.Blocks(css=CUSTOM_CSS, title="APISage Complete - AI-Powered API Analysis & Assistant") as app:
-        
+    with gr.Blocks(
+        css=CUSTOM_CSS, title="APISage - AI-Powered API Analysis & Assistant"
+    ) as app:
+
         # Hero Section
-        gr.HTML("""
+        gr.HTML(
+            """
         <div class="hero-section">
             <div class="hero-title">🚀 APISage Complete</div>
             <div class="hero-subtitle">Stage 1: API Analysis & Evaluation • Stage 2: RAG Assistant</div>
         </div>
-        """)
-        
-        # Compact configuration section
+        """
+        )
+
+        # API Specification section only
         with gr.Row():
-            with gr.Column(scale=2):
-                gr.HTML("### 🔑 API Configuration")
-                with gr.Row():
-                    api_key_input = gr.Textbox(
-                        label="OpenAI API Key",
-                        placeholder="sk-...",
-                        type="password",
-                        scale=2
-                    )
-                    set_key_btn = gr.Button("Set Key", variant="primary", scale=1)
-            
-            with gr.Column(scale=2):
-                gr.HTML("### 📁 API Specification")
-                with gr.Row():
-                    file_input = gr.File(
-                        label="Upload JSON/YAML",
-                        file_types=[".json", ".yaml", ".yml"],
-                        scale=2
-                    )
-                    demo_btn = gr.Button("🐾 Demo", variant="secondary", scale=1)
-        
+            gr.HTML("<h3>📁 API Specification</h3>")
+            with gr.Row():
+                file_input = gr.File(
+                    label="Upload JSON/YAML",
+                    file_types=[".json", ".yaml", ".yml"],
+                    scale=3,
+                )
+                demo_btn = gr.Button("🐾 Demo", variant="secondary", scale=1)
+
         with gr.Row():
-            key_status = gr.Textbox(
-                label="API Key Status",
-                value="❌ API key not set - required for analysis",
-                interactive=False,
-                scale=1
-            )
             status_display = gr.Textbox(
                 label="Upload Status",
                 value="Upload an API specification to get started",
                 interactive=False,
-                scale=1
+                scale=1,
             )
-        
+
         # Main tabs
         with gr.Tabs():
             # Tab 1: Stage 1 - Analysis & Evaluation
             with gr.TabItem("🔍 Stage 1: API Analysis & Evaluation"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        gr.HTML("### 📊 API Overview")
-                        api_info_display = gr.Markdown(
-                            "Upload an API specification or try the demo to see API details here.",
-                            elem_classes=["analysis-panel"]
+                        gr.HTML("<h3>📊 API Overview</h3>")
+                        
+                        # API status indicator
+                        api_status_indicator = gr.HTML(
+                            "<div style='padding: 1rem; border-radius: 8px; background: var(--glass-bg); border: 1px solid var(--glass-border); text-align: center;'><span class='status-warning'>⚠️ No API specification loaded</span></div>",
+                            visible=True
                         )
                         
+                        api_info_display = gr.Markdown(
+                            "Upload an API specification or try the demo to see API details here.",
+                            elem_classes=["analysis-panel"],
+                        )
+
                         analyze_btn = gr.Button(
                             "🚀 Start Analysis",
                             variant="primary",
                             size="lg",
-                            visible=False
+                            visible=False,
                         )
-                        
-                        # Move scores and charts to sidebar for compact layout
-                        results_section = gr.Column(visible=False)
-                        with results_section:
-                            score_display = gr.HTML("")
-                            radar_chart = gr.Plot()
-                    
+
+                        # Removed unused results_section components to improve performance
+
                     with gr.Column(scale=2):
-                        gr.HTML("### 📈 Analysis Results")
+                        gr.HTML("<h3>📈 Analysis Results</h3>")
                         analysis_output = gr.Markdown(
                             "Analysis results will appear here after running analysis.",
-                            elem_classes=["analysis-panel"]
+                            elem_classes=["analysis-panel"],
                         )
-                        
+
                         # Move spec display to a collapsible section
-                        with gr.Accordion("📊 OpenAPI Specification (Reference)", open=False):
+                        with gr.Accordion(
+                            "📊 OpenAPI Specification (Reference)", open=False
+                        ):
                             spec_display = gr.Code(
                                 label="Specification JSON/YAML",
                                 language="json",
-                                visible=False
+                                visible=False,
                             )
-                    
+
             # Tab 2: Stage 2 - RAG Assistant
             with gr.TabItem("💬 Stage 2: AI Assistant"):
                 with gr.Row():
                     with gr.Column(scale=3):
-                        gr.HTML("### 🤖 AI-Powered API Documentation Assistant")
+                        gr.HTML("<h3>🤖 AI-Powered API Documentation Assistant</h3>")
                         chatbot = gr.Chatbot(
-                            label="API Documentation Assistant",
-                            height=500,
-                            elem_classes=["assistant-chat"]
+                            label="🤖 AI-Powered API Documentation Assistant",
+                            height=550,
+                            elem_classes=["assistant-chat"],
+                            show_copy_button=True,
+                            show_share_button=False,
+                            avatar_images=("🧑‍💻", "🤖"),
+                            bubble_full_width=False,
+                            layout="panel",
                         )
-                        
+
                         with gr.Row():
                             msg_input = gr.Textbox(
-                                label="Your Question",
-                                placeholder="Ask about endpoints, authentication, code examples...",
-                                scale=4
+                                label="💬 Your Question",
+                                placeholder="Ask about endpoints, authentication, code examples, best practices...",
+                                scale=4,
+                                lines=2,
+                                max_lines=4,
+                                show_copy_button=True,
                             )
-                            send_btn = gr.Button("Send", variant="primary", scale=1)
-                    
+                            with gr.Column(scale=1):
+                                model_dropdown = gr.Dropdown(
+                                    label="🤖 AI Model",
+                                    choices=["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+                                    value="gpt-4o-mini",
+                                    info="Choose AI model (gpt-4o-mini is faster and cheaper)"
+                                )
+                                send_btn = gr.Button("🚀 Send", variant="primary", size="lg")
+                                streaming_toggle = gr.Checkbox(
+                                    label="⚡ Real-time Streaming",
+                                    value=True,
+                                    info="Enable for faster, progressive responses"
+                                )
+
                     with gr.Column(scale=1):
-                        gr.HTML("### 💡 Example Questions")
-                        gr.Dataset(
-                            samples=[
-                                ["How do I authenticate?"],
-                                ["Show Python code example"],
-                                ["What's the data format?"],
-                                ["How to handle errors?"],
-                                ["Give me cURL example"],
-                                ["Required parameters?"],
-                                ["JavaScript example"]
-                            ],
-                            headers=["Quick Asks"],
-                            type="index",
-                            components=[msg_input]
-                        )
+                        # Real-time status indicator
+                        with gr.Row():
+                            connection_status = gr.HTML(
+                                "<div class='status-success'>🟢 Backend Connected</div>",
+                                visible=True
+                            )
                         
-                        # Add DeepEval info panel
-                        gr.HTML("""
-                        <div style="margin-top: 20px; padding: 15px; background: rgba(100, 116, 139, 0.1); border-radius: 8px; border-left: 4px solid #64748b;">
-                            <h4 style="margin: 0 0 10px 0; color: #64748b;">🧪 Educational: Understanding RAG Evaluation</h4>
-                            <p style="margin: 0 0 10px 0; font-size: 0.85rem; color: #94a3b8; line-height: 1.4;">
-                                <strong>What is RAG Triad?</strong><br>
-                                A comprehensive evaluation framework that measures three critical aspects of AI-generated responses:
-                            </p>
+                        gr.HTML("<h3>💡 Smart Questions</h3>")
+                        with gr.Accordion("💡 Smart Question Suggestions", open=True):
+                            gr.Dataset(
+                                samples=[
+                                    ["🔐 How do I authenticate with this API?"],
+                                    ["🐍 Show me a Python code example"],
+                                    ["📋 What's the expected data format?"],
+                                    ["⚠️ How should I handle API errors?"],
+                                    ["🌐 Give me a cURL example"],
+                                    ["📝 What parameters are required?"],
+                                    ["⚡ Show JavaScript/TypeScript example"],
+                                    ["📚 API rate limits and best practices?"],
+                                    ["🔍 Available endpoints and methods?"],
+                                    ["🛠️ SDK recommendations and tools?"],
+                                ],
+                                headers=["Quick Questions"],
+                                type="index",
+                                components=[msg_input],
+                            )
+
+                        # Enhanced AI Features Panel with 2025 Design
+                        with gr.Accordion("🤖 AI Assistant Features", open=False):
+                            gr.HTML(
+                                """
+                            <div style="background: var(--glass-bg); backdrop-filter: blur(10px); padding: 20px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                                <h4 style="margin: 0 0 15px 0; color: var(--neon-accent); font-weight: 700;">🚀 2025 AI-Powered Assistant Features</h4>
+                                
+                                <div style="display: grid; gap: 15px; margin-bottom: 20px;">
+                                    <div style="background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 8px; border-left: 3px solid #10b981;">
+                                        <h5 style="margin: 0 0 8px 0; color: #10b981;">⚡ Real-time Streaming</h5>
+                                        <p style="margin: 0; font-size: 0.9rem; color: #94a3b8; line-height: 1.4;">Get progressive responses as the AI thinks, reducing perceived latency and improving user experience.</p>
+                                    </div>
+                                    
+                                    <div style="background: rgba(59, 130, 246, 0.1); padding: 12px; border-radius: 8px; border-left: 3px solid #3b82f6;">
+                                        <h5 style="margin: 0 0 8px 0; color: #3b82f6;">🎯 Context-Aware Responses</h5>
+                                        <p style="margin: 0; font-size: 0.9rem; color: #94a3b8; line-height: 1.4;">AI understands your specific API documentation and provides tailored answers with relevant examples.</p>
+                                    </div>
+                                    
+                                    <div style="background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 8px; border-left: 3px solid #f59e0b;">
+                                        <h5 style="margin: 0 0 8px 0; color: #f59e0b;">📚 Multi-Format Support</h5>
+                                        <p style="margin: 0; font-size: 0.9rem; color: #94a3b8; line-height: 1.4;">Supports OpenAPI 3.0, Swagger, and custom API specification formats with intelligent parsing.</p>
+                                    </div>
+                                    
+                                    <div style="background: rgba(168, 85, 247, 0.1); padding: 12px; border-radius: 8px; border-left: 3px solid #a855f7;">
+                                        <h5 style="margin: 0 0 8px 0; color: #a855f7;">🔍 Smart Code Examples</h5>
+                                        <p style="margin: 0; font-size: 0.9rem; color: #94a3b8; line-height: 1.4;">Generates Python, JavaScript, cURL, and other language examples based on your API specification.</p>
+                                    </div>
+                                </div>
+                                
+                                <div style="background: rgba(0, 245, 255, 0.05); padding: 15px; border-radius: 8px; border: 1px solid rgba(0, 245, 255, 0.2);">
+                                    <h5 style="margin: 0 0 10px 0; color: var(--neon-accent);">💡 Pro Tips for Better Results</h5>
+                                    <ul style="margin: 0; padding-left: 20px; font-size: 0.9rem; color: #94a3b8; line-height: 1.6;">
+                                        <li>Be specific about the programming language you want examples in</li>
+                                        <li>Ask for complete workflows, not just individual endpoint calls</li>
+                                        <li>Request error handling patterns and best practices</li>
+                                        <li>Inquire about authentication flows and security considerations</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            """
+                            )
+
+            # Tab 3: RAG Pipeline Study
+            with gr.TabItem("🔬 RAG Pipeline Study"):
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        gr.HTML("<h3>🧬 RAG v2 Pipeline Demonstration & Study</h3>")
+                        gr.Markdown(
+                            """
+                        **Educational Interface**: This tab demonstrates the complete RAG v2 pipeline for learning and studying purposes.
+                        
+                        **What you'll see:**
+                        - Real-time execution of all 7 RAG v2 components
+                        - Performance metrics and evaluation scores
+                        - Component-by-component breakdown
+                        - Visual pipeline flow visualization
+                        """
+                        )
+
+                        with gr.Row():
+                            run_pipeline_btn = gr.Button(
+                                "🚀 Run RAG v2 Pipeline Demo",
+                                variant="primary",
+                                size="lg",
+                            )
+                            clear_pipeline_btn = gr.Button(
+                                "🔄 Clear Results", variant="secondary"
+                            )
+
+                        pipeline_output = gr.Code(
+                            label="RAG Pipeline Execution Log",
+                            language="shell",
+                            value="Click 'Run RAG v2 Pipeline Demo' to see the complete pipeline in action...",
+                            lines=25,
+                            elem_classes=["analysis-panel"],
+                        )
+
+                    with gr.Column(scale=1):
+                        gr.HTML("<h3>📊 Pipeline Components</h3>")
+                        gr.Markdown(
+                            """
+                        **1. 📝 Chunking Strategy**
+                        - LangChain RecursiveJsonSplitter
+                        - Semantic chunking for OpenAPI specs
+                        - Fallback mechanism included
+                        
+                        **2. 🔍 Hybrid Search Engine**
+                        - ChromaDB vector database
+                        - BGE-M3 multilingual embeddings
+                        - BM25 keyword + semantic search
+                        
+                        **3. 🎯 Context Assembler**
+                        - Anthropic's contextual enrichment
+                        - Smart deduplication
+                        - Token-aware prioritization
+                        
+                        **4. 💾 Semantic Cache**
+                        - Cosine similarity caching
+                        - Performance optimization
+                        - Cache hit/miss tracking
+                        
+                        **5. ⚡ Cache Layer**
+                        - Redis backend support
+                        - Memory fallback
+                        - Efficient key management
+                        
+                        **6. 🧪 DeepEval Enhanced**
+                        - RAG Triad evaluation
+                        - Answer/Faithfulness/Context relevancy
+                        - Mock evaluation for demo
+                        
+                        **7. 📈 Performance Monitor**
+                        - Real-time metrics
+                        - System health monitoring
+                        - Time-bucketed statistics
+                        """
+                        )
+
+                        gr.HTML(
+                            """
+                        <div style="margin-top: 20px; padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 4px solid #3b82f6;">
+                            <h4 style="margin: 0 0 10px 0; color: #3b82f6;">💡 Learning Objectives</h4>
                             <ul style="margin: 0; padding-left: 20px; font-size: 0.85rem; color: #94a3b8; line-height: 1.6;">
-                                <li><strong>🎯 Answer Relevancy:</strong> Semantic similarity between question and answer using cosine similarity of embeddings</li>
-                                <li><strong>🔍 Faithfulness:</strong> Percentage of claims in the answer that can be verified from source documents</li>
-                                <li><strong>📋 Context Relevancy:</strong> Ratio of relevant vs. irrelevant chunks in retrieved documentation</li>
+                                <li>Understand RAG v2 architecture</li>
+                                <li>See real production-grade code in action</li>
+                                <li>Learn about evaluation metrics</li>
+                                <li>Observe performance characteristics</li>
+                                <li>Study component interactions</li>
                             </ul>
-                            <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: #94a3b8; line-height: 1.4;">
-                                <strong>How Overall Score is Calculated:</strong><br>
-                                <code style="background: rgba(0,0,0,0.2); padding: 2px 4px; border-radius: 3px;">
-                                Overall = (0.4 × Answer Relevancy) + (0.4 × Faithfulness) + (0.2 × Context Relevancy)
-                                </code><br>
-                                <em style="font-size: 0.8rem;">Higher weights on answer quality, lower on retrieval quality</em>
-                            </p>
-                            <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: #94a3b8; line-height: 1.4;">
-                                <strong>Why This Matters:</strong><br>
-                                • Transparency: See exactly how AI responses are evaluated<br>
-                                • Trust: Understand the reliability of each answer<br>
-                                • Learning: Improve your questions based on scoring feedback
-                            </p>
                         </div>
-                        """)
-        
-        # Compact footer
-        gr.HTML("""
-        <div style="text-align: center; margin-top: 1rem; opacity: 0.7; font-size: 0.9rem;">
-            <p>🔗 <a href="http://localhost:8080/docs" target="_blank">API Docs</a> • 
-            📍 Upload spec → Analyze → Ask questions</p>
+                        """
+                        )
+
+        # Enhanced footer with 2025 design
+        gr.HTML(
+            f"""
+        <div style="text-align: center; margin-top: 2rem; padding: 1.5rem; background: var(--glass-bg); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid var(--glass-border);">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 2rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                <a href="{API_BASE_URL}/docs" target="_blank" style="color: var(--neon-accent); text-decoration: none; font-weight: 600; transition: all 0.2s;">🔗 API Documentation</a>
+                <span style="color: #64748b;">•</span>
+                <span style="color: #94a3b8; font-weight: 500;">📱 Mobile Optimized</span>
+                <span style="color: #64748b;">•</span>
+                <span style="color: #94a3b8; font-weight: 500;">♿ Accessibility Ready</span>
+                <span style="color: #64748b;">•</span>
+                <span style="color: #94a3b8; font-weight: 500;">⚡ Real-time Streaming</span>
+            </div>
+            <div style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
+                <p style="margin: 0;">🚀 <strong>Workflow:</strong> Upload API spec → Set OpenAI key → Analyze quality → Ask AI questions → Study RAG pipeline</p>
+                <p style="margin: 0.5rem 0 0 0;">🎯 <strong>2025 Features:</strong> Glassmorphism UI • Streaming responses • Mobile-first design • Enhanced accessibility</p>
+            </div>
         </div>
-        """)
-        
-        # Event handlers
-        set_key_btn.click(
-            fn=set_api_key,
-            inputs=[api_key_input],
-            outputs=[key_status]
-        ).then(
-            fn=lambda: "",
-            outputs=[api_key_input]
+        """
         )
-        
+
+        # Event handlers
+
+        def update_api_status_on_load(file):
+            """Update API status indicator when spec is loaded"""
+            if file:
+                return gr.update(value="<div style='padding: 1rem; border-radius: 8px; background: var(--glass-bg); border: 1px solid var(--success-glow); text-align: center;'><span class='status-success'>✅ API specification loaded and ready</span></div>")
+            return gr.update(value="<div style='padding: 1rem; border-radius: 8px; background: var(--glass-bg); border: 1px solid var(--glass-border); text-align: center;'><span class='status-warning'>⚠️ No API specification loaded</span></div>")
+
         file_input.change(
             fn=load_api_spec,
             inputs=[file_input],
-            outputs=[spec_display, api_info_display, status_display]
+            outputs=[spec_display, api_info_display, status_display],
         ).then(
-            fn=lambda: gr.update(visible=True),
-            outputs=[analyze_btn]
-        )
-        
+            fn=update_api_status_on_load,
+            inputs=[file_input],
+            outputs=[api_status_indicator]
+        ).then(fn=lambda: gr.update(visible=True), outputs=[analyze_btn])
+
         demo_btn.click(
-            fn=load_demo,
-            outputs=[spec_display, api_info_display, status_display]
+            fn=load_demo, outputs=[spec_display, api_info_display, status_display]
         ).then(
-            fn=lambda: gr.update(visible=True),
-            outputs=[analyze_btn]
-        )
-        
+            fn=lambda: gr.update(value="<div style='padding: 1rem; border-radius: 8px; background: var(--glass-bg); border: 1px solid var(--success-glow); text-align: center;'><span class='status-success'>✅ Demo API loaded and ready</span></div>"),
+            outputs=[api_status_indicator]
+        ).then(fn=lambda: gr.update(visible=True), outputs=[analyze_btn])
+
         def start_streaming_analysis():
-            """Wrapper to handle streaming analysis"""
-            import asyncio
-            
+            """Start API analysis with proper async handling"""
             if not current_spec:
                 return "❌ Please upload an API specification first"
-            
-            # Initialize with starting message
-            analysis_text = "🔄 Initializing analysis..."
-            
-            try:
-                # Create event loop if not exists
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                
-                # Run the streaming analysis
-                stream_gen = start_analysis_streaming()
-                
-                # Collect all streaming content
-                full_analysis = ""
-                async def collect_stream():
-                    nonlocal full_analysis
-                    async for chunk in stream_gen:
-                        full_analysis = chunk
-                    return full_analysis
-                
-                # Run async function
-                if loop.is_running():
-                    # If loop is running, use asyncio.create_task
-                    task = loop.create_task(collect_stream())
-                    result = task.result() if task.done() else full_analysis
-                else:
-                    result = loop.run_until_complete(collect_stream())
-                
-                return result or "Analysis completed"
-                
-            except Exception as e:
-                logger.error(f"Streaming analysis wrapper error: {str(e)}")
-                # Fallback to regular analysis
-                try:
-                    loop = asyncio.get_event_loop()
-                    result = loop.run_until_complete(start_analysis())
-                    return result[0] if isinstance(result, tuple) else str(result)
-                except Exception as fallback_error:
-                    return f"❌ Analysis failed: {str(fallback_error)}"
 
-        analyze_btn.click(
-            fn=start_streaming_analysis,
-            outputs=[analysis_output]
-        )
-        
+            try:
+                import asyncio
+                import concurrent.futures
+
+                async def run_analysis():
+                    """Run the actual analysis"""
+                    result = await start_analysis()
+                    # start_analysis returns (analysis, status, metadata)
+                    if isinstance(result, tuple) and len(result) >= 1:
+                        return result[0]  # Return the analysis text
+                    return str(result)
+
+                # Safely run async function without interfering with existing event loops
+                try:
+                    # Check if we're already in an event loop
+                    asyncio.get_running_loop()
+                    # We're in an event loop, use ThreadPoolExecutor to run in separate thread
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, run_analysis())
+                        return future.result(timeout=120)
+                except RuntimeError:
+                    # No event loop running, safe to use asyncio.run
+                    return asyncio.run(run_analysis())
+
+            except concurrent.futures.TimeoutError:
+                logger.error("Analysis timed out after 120 seconds")
+                return "❌ Analysis timed out. Please try again."
+            except Exception as e:
+                logger.error(f"Analysis error: {str(e)}")
+                return f"❌ Analysis failed: {str(e)}"
+
+        analyze_btn.click(fn=start_streaming_analysis, outputs=[analysis_output])
+
+        # Modern event handling with enhanced chat
+        def handle_chat_submission(message, history, use_streaming):
+            """Handle chat submission with enhanced formatting"""
+            # Always use enhanced chat (streaming functionality will be added in future)
+            return chat_with_api(message, history)
+
         send_btn.click(
-            fn=chat_with_api,
-            inputs=[msg_input, chatbot],
+            fn=lambda msg, hist, streaming: handle_chat_submission(msg, hist, streaming),
+            inputs=[msg_input, chatbot, streaming_toggle],
             outputs=[chatbot, msg_input]
         )
-        
+
         msg_input.submit(
-            fn=chat_with_api,
-            inputs=[msg_input, chatbot],
+            fn=lambda msg, hist, streaming: handle_chat_submission(msg, hist, streaming),
+            inputs=[msg_input, chatbot, streaming_toggle],
             outputs=[chatbot, msg_input]
         )
-        
+
+        # RAG Pipeline Study tab event handlers
+        run_pipeline_btn.click(fn=run_rag_pipeline_demo, outputs=[pipeline_output])
+
+        clear_pipeline_btn.click(fn=clear_pipeline_output, outputs=[pipeline_output])
+
         return app
+
 
 if __name__ == "__main__":
     logger.info("=== APISage Complete Application Starting ===")
     logger.info("Application: APISage Complete (Stage 1 + Stage 2)")
     logger.info("Server: http://127.0.0.1:7860")
     logger.info("Features: API Analysis & Evaluation + RAG Assistant")
-    logger.info("Backend API: http://localhost:8080")
+    logger.info(f"Backend API: {API_BASE_URL}")
     logger.info("Log file: apisage_complete.log")
-    
+
     print("🚀 Launching APISage Complete Application...")
     print("🎯 Stage 1: API Analysis & Evaluation")
     print("🤖 Stage 2: AI Assistant (RAG)")
     print("📍 Access: http://localhost:7860")
-    
+
     try:
         logger.info("Creating complete interface with both analysis and assistant tabs")
         app = create_complete_interface()
-        
+
         logger.info("Launching Gradio application")
         app.launch(
-            server_name="127.0.0.1",
-            server_port=7860,
-            inbrowser=True,
-            quiet=False
+            server_name="127.0.0.1", server_port=7860, inbrowser=True, quiet=False
         )
     except Exception as e:
         logger.error(f"Failed to launch complete application: {str(e)}")

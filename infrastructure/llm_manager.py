@@ -4,11 +4,16 @@ Clean, focused implementation for LLM integration
 """
 
 import asyncio
+import json
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import structlog
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 try:
     import openai
@@ -76,8 +81,9 @@ class SimpleLLMManager:
     """
 
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
+        # Get API key from environment variable or parameter
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-
+        
         # Validate and set default model
         if not self._is_valid_model(model):
             logger.warning(f"Invalid model '{model}', falling back to gpt-4o-mini")
@@ -86,24 +92,29 @@ class SimpleLLMManager:
         self.default_model = model
         self.client: Optional[AsyncOpenAI] = None
 
-        if not self.api_key:
-            logger.warning(
-                "no_openai_api_key",
-                message="OpenAI API key not provided - LLM functionality will be limited",
-            )
-
+        # Initialize client only if API key is provided
         if OPENAI_AVAILABLE and self.api_key:
             self.client = AsyncOpenAI(api_key=self.api_key)
             logger.info("llm_manager_initialized", model=self.default_model)
         else:
-            logger.warning(
-                "llm_manager_disabled", reason="OpenAI not available or API key missing"
+            logger.info(
+                "llm_manager_disabled", 
+                reason="OpenAI not available or API key not provided",
+                note="System will work in demo mode - provide API key for full functionality"
             )
 
     def _is_valid_model(self, model: str) -> bool:
         """Validate if the model is supported"""
         supported_models = set(ModelConfig.DEFAULTS.keys())
         return model in supported_models
+
+    def _clean_prompt_content(self, prompt: str) -> str:
+        """Clean prompt content to avoid encoding issues by replacing problematic Unicode characters."""
+        return (
+            prompt.replace("'", "'")
+            .replace("'", "'")
+            .replace(""", '"').replace(""", '"')
+        )
 
     def optimize_request(self, request: LLMRequest) -> LLMRequest:
         """
@@ -121,8 +132,10 @@ class SimpleLLMManager:
             prompt=request.prompt,
             model=request.model,
             max_tokens=request.max_tokens or defaults["max_tokens"],
-            temperature=request.temperature if defaults["temperature"] is not None else 0.0,
-            response_format=request.response_format
+            temperature=(
+                request.temperature if defaults["temperature"] is not None else 0.0
+            ),
+            response_format=request.response_format,
         )
 
         # Log optimization for o1 models
@@ -131,7 +144,7 @@ class SimpleLLMManager:
                 "optimizing_o1_request",
                 model=request.model,
                 max_tokens=optimized.max_tokens,
-                temperature="N/A (o1 model)"
+                temperature="N/A (o1 model)",
             )
 
         return optimized
@@ -140,8 +153,7 @@ class SimpleLLMManager:
         """
         Generate streaming response from LLM
         """
-        import json
-        
+
         if not self.client:
             yield f"data: {json.dumps({'error': 'LLM not available - please set OPENAI_API_KEY'})}\n\n"
             return
@@ -156,19 +168,20 @@ class SimpleLLMManager:
 
         try:
             # Clean prompt content to avoid encoding issues
-            clean_prompt = optimized_request.prompt
-            clean_prompt = clean_prompt.replace("'", "'").replace("'", "'").replace(""", '"').replace(""", '"')
-            
+            clean_prompt = self._clean_prompt_content(optimized_request.prompt)
+
             # Build the request parameters using optimized request
             completion_params = {
                 "model": optimized_request.model,
                 "messages": [{"role": "user", "content": clean_prompt}],
                 "stream": True,  # Enable streaming
             }
-            
+
             # Use correct parameter name based on model type
             if ModelConfig.is_o1_model(optimized_request.model):
-                completion_params["max_completion_tokens"] = optimized_request.max_tokens
+                completion_params["max_completion_tokens"] = (
+                    optimized_request.max_tokens
+                )
             else:
                 completion_params["max_tokens"] = optimized_request.max_tokens
 
@@ -178,12 +191,12 @@ class SimpleLLMManager:
 
             # Make the streaming API call
             stream = await self.client.chat.completions.create(**completion_params)
-            
+
             async for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     yield f"data: {json.dumps({'content': content})}\n\n"
-            
+
             yield "data: [DONE]\n\n"
 
         except Exception as e:
@@ -192,7 +205,7 @@ class SimpleLLMManager:
                 error_str = "Invalid or missing API key"
             elif "rate limit" in error_str.lower():
                 error_str = "Rate limit exceeded, please try again later"
-            
+
             yield f"data: {json.dumps({'error': error_str})}\n\n"
 
     async def generate(self, request: LLMRequest) -> Optional[LLMResponse]:
@@ -219,20 +232,21 @@ class SimpleLLMManager:
 
         try:
             # Clean prompt content to avoid encoding issues
-            clean_prompt = optimized_request.prompt
             # Replace problematic unicode characters with ASCII equivalents
-            clean_prompt = clean_prompt.replace("'", "'").replace("'", "'").replace(""", '"').replace(""", '"')
-            
+            clean_prompt = self._clean_prompt_content(optimized_request.prompt)
+
             # Build the request parameters using optimized request
             completion_params = {
                 "model": optimized_request.model,
                 "messages": [{"role": "user", "content": clean_prompt}],
             }
-            
+
             # Use correct parameter name based on model type
             if ModelConfig.is_o1_model(optimized_request.model):
                 # O1 models use max_completion_tokens
-                completion_params["max_completion_tokens"] = optimized_request.max_tokens
+                completion_params["max_completion_tokens"] = (
+                    optimized_request.max_tokens
+                )
             else:
                 # Standard models use max_tokens
                 completion_params["max_tokens"] = optimized_request.max_tokens
@@ -253,9 +267,9 @@ class SimpleLLMManager:
                 logger.info(
                     "using_structured_output",
                     response_format_type=optimized_request.response_format.get("type"),
-                    schema_name=optimized_request.response_format.get("json_schema", {}).get(
-                        "name"
-                    ),
+                    schema_name=optimized_request.response_format.get(
+                        "json_schema", {}
+                    ).get("name"),
                     schema_properties=list(schema_props.keys()) if schema_props else [],
                 )
             else:
@@ -270,34 +284,34 @@ class SimpleLLMManager:
                 content=content,
                 model=response.model or optimized_request.model,
                 usage={
-                    "prompt_tokens": response.usage.prompt_tokens
-                    if response.usage
-                    else 0,
-                    "completion_tokens": response.usage.completion_tokens
-                    if response.usage
-                    else 0,
-                    "total_tokens": response.usage.total_tokens
-                    if response.usage
-                    else 0,
+                    "prompt_tokens": (
+                        response.usage.prompt_tokens if response.usage else 0
+                    ),
+                    "completion_tokens": (
+                        response.usage.completion_tokens if response.usage else 0
+                    ),
+                    "total_tokens": (
+                        response.usage.total_tokens if response.usage else 0
+                    ),
                 },
             )
 
         except Exception as e:
             # Handle encoding issues and mask sensitive information
             error_str = str(e)
-            
+
             # Mask API key in error messages for security
             if self.api_key and len(self.api_key) > 10:
                 masked_key = self.api_key[:10] + "*" * (len(self.api_key) - 10)
                 error_str = error_str.replace(self.api_key, masked_key)
-            
+
             try:
                 # Only clean if there are actual encoding issues
-                error_str.encode('utf-8')
+                error_str.encode("utf-8")
             except UnicodeEncodeError:
                 # Only then fall back to ASCII cleaning
-                error_str = error_str.encode('ascii', 'ignore').decode('ascii')
-                
+                error_str = error_str.encode("ascii", "ignore").decode("ascii")
+
             logger.error(
                 "llm_generation_failed",
                 error=error_str,
@@ -324,13 +338,16 @@ class SimpleLLMManager:
             return response.content
         return None
 
-    def refresh_api_key(self) -> bool:
-        """Refresh the API key and client after environment variable change"""
+    def refresh_api_key(self, new_api_key: Optional[str] = None) -> bool:
+        """Refresh the API key and client with a new API key"""
         try:
-            new_api_key = os.getenv("OPENAI_API_KEY")
+            # Try new key, then environment variable
             if new_api_key:
-                # Always refresh the client, even if key appears the same
                 self.api_key = new_api_key
+            else:
+                self.api_key = os.getenv("OPENAI_API_KEY")
+            
+            if self.api_key:
                 if OPENAI_AVAILABLE:
                     self.client = AsyncOpenAI(api_key=self.api_key)
                     logger.info(
@@ -347,8 +364,8 @@ class SimpleLLMManager:
             else:
                 self.api_key = None
                 self.client = None
-                logger.warning(
-                    "llm_manager_disabled", reason="No API key in environment"
+                logger.info(
+                    "llm_manager_disabled", reason="No API key provided"
                 )
                 return False
         except Exception as e:
