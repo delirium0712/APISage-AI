@@ -73,7 +73,7 @@ Return ONLY the enhanced chunk text (context + original), no explanation:
 """
 
         try:
-            from infrastructure.llm_manager import LLMRequest
+            from .llm_manager import LLMRequest
 
             # Create LLM request for enhancement
             llm_request = LLMRequest(
@@ -190,7 +190,7 @@ class ContextualRetrieval:
         }
 
         # Create chunks using existing chunker
-        from infrastructure.chunking_strategy import APISpecChunker
+        from .chunking_strategy import APISpecChunker
         chunker = APISpecChunker()
         raw_chunks = chunker.chunk_api_spec(api_spec)
 

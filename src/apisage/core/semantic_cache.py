@@ -234,7 +234,7 @@ class SemanticCache:
 
     def _find_best_match(
         self,
-        query_embedding: np.ndarray,
+        query_embedding: "np.ndarray",
         metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> Optional[Tuple[str, float]]:
         """Find the best matching cache entry."""

@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch
 
-from api.main import app
+from apisage.api.main import app
 
 
 @pytest.fixture
@@ -72,7 +72,7 @@ async def test_rag_query_empty_question(client):
 
 def test_create_analysis_prompt():
     """Test analysis prompt creation"""
-    from api.main import create_analysis_prompt
+    from apisage.api.main import create_analysis_prompt
 
     spec = {
         "info": {"title": "Test API", "version": "1.0.0"},
@@ -87,7 +87,7 @@ def test_create_analysis_prompt():
 
 def test_parse_llm_response():
     """Test LLM response parsing"""
-    from api.main import parse_llm_response
+    from apisage.api.main import parse_llm_response
 
     response = """
 ## Critical Issues

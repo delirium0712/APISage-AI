@@ -12,7 +12,7 @@ class TestChunkingStrategy:
     def test_import_chunking_strategy(self):
         """Test that chunking strategy can be imported"""
         try:
-            from infrastructure.chunking_strategy import APISpecChunker
+            from apisage.core.chunking_strategy import APISpecChunker
 
             assert APISpecChunker is not None
         except ImportError:
@@ -21,7 +21,7 @@ class TestChunkingStrategy:
     def test_create_chunker(self):
         """Test chunker creation"""
         try:
-            from infrastructure.chunking_strategy import create_chunker
+            from apisage.core.chunking_strategy import create_chunker
 
             chunker = create_chunker()
             assert chunker is not None
@@ -35,7 +35,7 @@ class TestPerformanceMonitor:
     def test_import_performance_monitor(self):
         """Test that performance monitor can be imported"""
         try:
-            from infrastructure.performance_monitor import PerformanceMonitor
+            from apisage.core.performance_monitor import PerformanceMonitor
 
             assert PerformanceMonitor is not None
         except ImportError:
@@ -44,7 +44,7 @@ class TestPerformanceMonitor:
     def test_performance_monitor_creation(self):
         """Test performance monitor creation"""
         try:
-            from infrastructure.performance_monitor import PerformanceMonitor
+            from apisage.core.performance_monitor import PerformanceMonitor
 
             monitor = PerformanceMonitor()
             assert monitor is not None
@@ -58,7 +58,7 @@ class TestCacheLayer:
     def test_import_cache_layer(self):
         """Test that cache layer can be imported"""
         try:
-            from infrastructure.cache_layer import get_cache
+            from apisage.core.cache_layer import get_cache
 
             assert get_cache is not None
         except ImportError:
@@ -71,7 +71,7 @@ class TestAgenticOrchestrator:
     def test_import_agentic_orchestrator(self):
         """Test that orchestrator can be imported"""
         try:
-            from infrastructure.agentic_orchestrator import (
+            from apisage.core.agentic_orchestrator import (
                 AgenticOrchestrator,
                 create_agentic_orchestrator,
             )
@@ -84,7 +84,7 @@ class TestAgenticOrchestrator:
     def test_agent_roles_enum(self):
         """Test agent roles enumeration"""
         try:
-            from infrastructure.agentic_orchestrator import AgentRole
+            from apisage.core.agentic_orchestrator import AgentRole
 
             assert hasattr(AgentRole, "SECURITY_ANALYST")
             assert hasattr(AgentRole, "PERFORMANCE_ENGINEER")
@@ -95,7 +95,7 @@ class TestAgenticOrchestrator:
     def test_create_orchestrator(self):
         """Test orchestrator creation"""
         try:
-            from infrastructure.agentic_orchestrator import create_agentic_orchestrator
+            from apisage.core.agentic_orchestrator import create_agentic_orchestrator
 
             orchestrator = create_agentic_orchestrator()
             assert orchestrator is not None
@@ -109,7 +109,7 @@ class TestHybridSearch:
     def test_import_hybrid_search(self):
         """Test that hybrid search can be imported"""
         try:
-            from infrastructure.hybrid_search import get_hybrid_search_engine
+            from apisage.core.hybrid_search import get_hybrid_search_engine
 
             assert get_hybrid_search_engine is not None
         except ImportError:
@@ -122,7 +122,7 @@ class TestDeepEvalEnhanced:
     def test_import_deepeval_enhanced(self):
         """Test that DeepEval enhanced can be imported"""
         try:
-            from infrastructure.deepeval_enhanced import get_deep_eval_enhanced
+            from apisage.core.deepeval_enhanced import get_deep_eval_enhanced
 
             assert get_deep_eval_enhanced is not None
         except ImportError:
@@ -135,7 +135,7 @@ class TestContextAssembler:
     def test_import_context_assembler(self):
         """Test that context assembler can be imported"""
         try:
-            from infrastructure.context_assembler import get_context_assembler
+            from apisage.core.context_assembler import get_context_assembler
 
             assert get_context_assembler is not None
         except ImportError:
@@ -148,7 +148,7 @@ class TestSemanticCache:
     def test_import_semantic_cache(self):
         """Test that semantic cache can be imported"""
         try:
-            from infrastructure.semantic_cache import create_semantic_cache
+            from apisage.core.semantic_cache import create_semantic_cache
 
             assert create_semantic_cache is not None
         except ImportError:

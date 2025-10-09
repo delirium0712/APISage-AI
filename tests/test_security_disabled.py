@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch
 import time
 
-from api.main import app
+from apisage.api.main import app
 # Note: API key validation functions removed with endpoint simplification
 
 

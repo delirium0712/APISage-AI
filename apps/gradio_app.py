@@ -290,6 +290,402 @@ CUSTOM_CSS = """
     50% { width: 100%; }
     100% { width: 0%; }
 }
+
+@keyframes pulse-glow {
+    0%, 100% {
+        opacity: 0.6;
+        transform: scaleX(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scaleX(1.02);
+    }
+}
+
+@keyframes rotate-glow {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Enhanced Multi-Agent Analysis Styles */
+.analysis-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: var(--glass-bg);
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+}
+
+.action-buttons-row {
+    margin: 1.5rem 0;
+    gap: 1rem !important;
+    align-items: center;
+}
+
+.primary-action-btn {
+    background: var(--primary-gradient) !important;
+    border: none !important;
+    color: white !important;
+    font-weight: 600 !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+    transition: all 0.3s ease !important;
+    min-height: 44px !important;
+}
+
+.primary-action-btn:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+.secondary-action-btn {
+    background: var(--glass-bg) !important;
+    border: 1px solid var(--glass-border) !important;
+    color: #94a3b8 !important;
+    backdrop-filter: blur(10px) !important;
+    transition: all 0.3s ease !important;
+    min-height: 44px !important;
+}
+
+.secondary-action-btn:hover {
+    background: rgba(148, 163, 184, 0.1) !important;
+    border-color: var(--neon-accent) !important;
+    color: var(--neon-accent) !important;
+}
+
+/* Feature Grid Cards */
+.feature-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+    gap: 1rem !important;
+    margin: 1.5rem 0 !important;
+}
+
+.feature-card {
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(15px) saturate(180%) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 12px !important;
+    padding: 1.5rem 1rem !important;
+    text-align: center !important;
+    transition: all 0.3s ease !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px) !important;
+    border-color: var(--neon-accent) !important;
+    box-shadow: 0 10px 25px rgba(0, 245, 255, 0.2) !important;
+}
+
+.feature-card::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: -100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(90deg, transparent, rgba(0, 245, 255, 0.1), transparent) !important;
+    transition: left 0.5s !important;
+}
+
+.feature-card:hover::before {
+    left: 100% !important;
+}
+
+.feature-icon {
+    font-size: 2rem !important;
+    margin-bottom: 0.5rem !important;
+    filter: drop-shadow(0 0 8px var(--neon-accent)) !important;
+}
+
+.feature-card h4 {
+    color: white !important;
+    margin: 0.5rem 0 !important;
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+}
+
+.feature-card p {
+    color: #94a3b8 !important;
+    margin: 0 !important;
+    font-size: 0.9rem !important;
+}
+
+/* Agent Progress Dashboard */
+.progress-section {
+    margin: 2rem 0 !important;
+}
+
+.agent-progress-panel {
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(15px) saturate(180%) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 16px !important;
+    padding: 2rem !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.agent-progress-panel::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 2px !important;
+    background: linear-gradient(90deg, var(--neon-accent), #00ff88, var(--neon-accent)) !important;
+    animation: pulse-glow 2s ease-in-out infinite !important;
+}
+
+.dashboard-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin-bottom: 1.5rem !important;
+    padding-bottom: 1rem !important;
+    border-bottom: 1px solid rgba(0, 188, 212, 0.2) !important;
+}
+
+.dashboard-header h3 {
+    margin: 0 !important;
+    color: var(--neon-accent) !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    text-shadow: 0 0 10px rgba(0, 188, 212, 0.3) !important;
+}
+
+.agents-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) !important;
+    gap: 1.25rem !important;
+    margin-top: 0 !important;
+}
+
+.agent-status-item {
+    display: flex !important;
+    align-items: center !important;
+    padding: 1.25rem !important;
+    background: rgba(255, 255, 255, 0.03) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.agent-status-item::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: -100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: linear-gradient(90deg, transparent, rgba(0, 188, 212, 0.08), transparent) !important;
+    transition: left 0.6s ease !important;
+}
+
+.agent-status-item:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: var(--neon-accent) !important;
+    transform: translateY(-2px) scale(1.01) !important;
+    box-shadow: 0 8px 24px rgba(0, 188, 212, 0.15) !important;
+}
+
+.agent-status-item:hover::before {
+    left: 100% !important;
+}
+
+.agent-icon {
+    font-size: 1.5rem !important;
+    margin-right: 1rem !important;
+    filter: drop-shadow(0 0 5px var(--neon-accent)) !important;
+}
+
+.agent-info {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-grow: 1 !important;
+}
+
+.agent-info strong {
+    color: white !important;
+    font-size: 0.95rem !important;
+    margin-bottom: 0.25rem !important;
+}
+
+.agent-icon-large {
+    font-size: 2rem !important;
+    margin-right: 1.25rem !important;
+    filter: drop-shadow(0 0 12px var(--neon-accent)) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+    background: radial-gradient(circle, rgba(0, 188, 212, 0.15), rgba(0, 188, 212, 0.05)) !important;
+    border-radius: 50% !important;
+    border: 2px solid rgba(0, 188, 212, 0.4) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.agent-details {
+    flex-grow: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+}
+
+.agent-name {
+    color: white !important;
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.5px !important;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.1) !important;
+}
+
+.agent-status {
+    font-size: 0.9rem !important;
+    padding: 0.375rem 0.75rem !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    display: inline-block !important;
+    min-width: 120px !important;
+    text-align: center !important;
+}
+
+.status-indicator {
+    background: rgba(148, 163, 184, 0.15) !important;
+    color: #94a3b8 !important;
+    border: 1px solid rgba(148, 163, 184, 0.3) !important;
+}
+
+.status-warning {
+    background: rgba(255, 193, 7, 0.15) !important;
+    color: #ffc107 !important;
+    border: 1px solid rgba(255, 193, 7, 0.3) !important;
+}
+
+.status-success {
+    background: rgba(40, 167, 69, 0.15) !important;
+    color: #28a745 !important;
+    border: 1px solid rgba(40, 167, 69, 0.3) !important;
+}
+
+/* Results Section */
+.results-section {
+    margin-top: 2rem !important;
+}
+
+.analysis-output-panel {
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(15px) saturate(180%) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 12px !important;
+    padding: 1.5rem !important;
+    min-height: 400px !important;
+    max-height: 600px !important;
+    overflow-y: auto !important;
+    font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace !important;
+    font-size: 0.9rem !important;
+    line-height: 1.6 !important;
+    color: #e2e8f0 !important;
+}
+
+.analysis-output-panel::-webkit-scrollbar {
+    width: 8px !important;
+}
+
+.analysis-output-panel::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-radius: 4px !important;
+}
+
+.analysis-output-panel::-webkit-scrollbar-thumb {
+    background: var(--neon-accent) !important;
+    border-radius: 4px !important;
+    opacity: 0.6 !important;
+}
+
+.analysis-output-panel::-webkit-scrollbar-thumb:hover {
+    opacity: 1 !important;
+}
+
+/* Accessibility Improvements */
+.primary-action-btn:focus-visible,
+.secondary-action-btn:focus-visible {
+    outline: 2px solid var(--neon-accent) !important;
+    outline-offset: 2px !important;
+    box-shadow: 0 0 0 4px rgba(0, 245, 255, 0.3) !important;
+}
+
+/* Mobile Responsive Enhancements */
+@media (max-width: 768px) {
+    .feature-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.75rem !important;
+    }
+
+    .feature-card {
+        padding: 1rem 0.75rem !important;
+    }
+
+    .feature-card h4 {
+        font-size: 1rem !important;
+    }
+
+    .feature-card p {
+        font-size: 0.8rem !important;
+    }
+
+    .agent-progress-panel {
+        grid-template-columns: 1fr !important;
+        padding: 1rem !important;
+    }
+
+    .agent-status-item {
+        padding: 0.75rem !important;
+    }
+
+    .action-buttons-row {
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+    }
+
+    .primary-action-btn,
+    .secondary-action-btn {
+        width: 100% !important;
+        margin: 0 !important;
+    }
+
+    .analysis-output-panel {
+        min-height: 300px !important;
+        max-height: 400px !important;
+        font-size: 0.8rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .feature-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .analysis-header h2 {
+        font-size: 1.5rem !important;
+    }
+
+    .analysis-header p {
+        font-size: 1rem !important;
+    }
+}
 """
 
 
@@ -945,6 +1341,212 @@ def clear_pipeline_output():
     return "Click 'Run RAG v2 Pipeline Demo' to see the complete pipeline in action..."
 
 
+# Multi-Agent Streaming Functions
+def stream_multiagent_analysis_with_dashboard(openapi_spec_content):
+    """Stream multi-agent analysis with simulated real-time dashboard updates for Gradio"""
+
+    if not openapi_spec_content:
+        yield "❌ Error: Please upload an OpenAPI specification first!", generate_dashboard_html()
+        return
+
+    # Handle both string and dict formats
+    if isinstance(openapi_spec_content, str):
+        if not openapi_spec_content.strip():
+            yield "❌ Error: Please upload an OpenAPI specification first!", generate_dashboard_html()
+            return
+        try:
+            spec_dict = json.loads(openapi_spec_content)
+        except json.JSONDecodeError:
+            yield "❌ Error: Invalid JSON format in OpenAPI specification!", generate_dashboard_html()
+            return
+    elif isinstance(openapi_spec_content, dict):
+        spec_dict = openapi_spec_content
+    else:
+        yield "❌ Error: Invalid OpenAPI specification format!", generate_dashboard_html()
+        return
+
+    BASE_URL = "http://localhost:8080"
+
+    try:
+        # Initialize agent statuses
+        agent_statuses = {
+            'SecurityAnalyst': '⏳ Waiting',
+            'DocumentationReviewer': '⏳ Waiting',
+            'PerformanceEngineer': '⏳ Waiting',
+            'IntegrationSpecialist': '⏳ Waiting'
+        }
+
+        # Initialize output
+        full_output = ["🚀 **Starting Multi-Agent Analysis...**\n"]
+        full_output.append("📋 **Initializing Agents:** SecurityAnalyst, DocumentationReviewer, PerformanceEngineer, IntegrationSpecialist\n\n")
+
+        # Phase 1: Initial state
+        yield ''.join(full_output), generate_dashboard_html(agent_statuses)
+
+        # Phase 2: Show agents starting (simulated progressive updates)
+        import time
+        agents = ['SecurityAnalyst', 'DocumentationReviewer', 'PerformanceEngineer', 'IntegrationSpecialist']
+
+        for i, agent in enumerate(agents):
+            agent_statuses[agent] = '🔄 Running'
+            full_output.append(f"🤖 **{agent}**: Starting analysis...\n")
+            yield ''.join(full_output), generate_dashboard_html(agent_statuses)
+            time.sleep(0.5)  # Small delay for visual effect
+
+        # Phase 3: Run actual analysis (non-streaming for now, but with dashboard updates)
+        full_output.append("\n🔄 **Running comprehensive analysis...**\n\n")
+        yield ''.join(full_output), generate_dashboard_html(agent_statuses)
+
+        # Make the actual API call
+        import requests
+        analysis_request = {
+            "openapi_spec": spec_dict,
+            "analysis_options": {
+                "include_security_analysis": True,
+                "include_performance_analysis": True,
+                "include_documentation_analysis": True,
+                "detailed_output": True
+            }
+        }
+
+        try:
+            response = requests.post(
+                f"{BASE_URL}/analyze-agentic",
+                json=analysis_request,
+                timeout=120
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+
+                # Phase 4: Show agents completing
+                for agent in agents:
+                    agent_statuses[agent] = '✅ Complete'
+                    full_output.append(f"✅ **{agent}**: Analysis completed\n")
+                    yield ''.join(full_output), generate_dashboard_html(agent_statuses)
+                    time.sleep(0.3)
+
+                # Phase 5: Show final results
+                full_output.append(f"\n🎉 **Multi-Agent Analysis Complete!**\n\n")
+
+                # Add the actual analysis results
+                analysis_content = result.get("consolidated_analysis", "No analysis content available")
+                full_output.append("---\n\n## 📋 Consolidated Analysis Report\n\n")
+                full_output.append(analysis_content)
+
+                yield ''.join(full_output), generate_dashboard_html(agent_statuses)
+
+            else:
+                error_msg = f"❌ Error: Backend returned status {response.status_code}"
+                yield error_msg, generate_dashboard_html()
+
+        except requests.exceptions.ConnectionError:
+            error_msg = """❌ **Connection Error**: Cannot connect to backend server.
+
+🔧 **Quick Fix:**
+1. Make sure the backend is running: `poetry run python -m api.main`
+2. Check if port 8080 is available
+3. Verify the API server started successfully
+
+⚡ The backend should be accessible at http://localhost:8080"""
+            yield error_msg, generate_dashboard_html()
+
+        except requests.exceptions.Timeout:
+            error_msg = """⏰ **Analysis Timeout**: The multi-agent analysis took too long to complete."""
+            yield error_msg, generate_dashboard_html()
+
+    except Exception as e:
+        logger.error(f"Streaming multi-agent analysis error: {str(e)}")
+        error_msg = f"""❌ **Unexpected Error**: {str(e)}
+
+🔍 **Troubleshooting:**
+1. Check the backend logs for details
+2. Ensure the OpenAPI spec is valid JSON/YAML
+3. Try refreshing and running again"""
+        yield error_msg, generate_dashboard_html()
+
+
+def generate_dashboard_html(agent_statuses=None):
+    """Generate dynamic dashboard HTML with current agent statuses"""
+    if agent_statuses is None:
+        agent_statuses = {
+            'SecurityAnalyst': '⏳ Waiting',
+            'DocumentationReviewer': '⏳ Waiting',
+            'PerformanceEngineer': '⏳ Waiting',
+            'IntegrationSpecialist': '⏳ Waiting'
+        }
+
+    agent_icons = {
+        'SecurityAnalyst': '🔒',
+        'DocumentationReviewer': '📝',
+        'PerformanceEngineer': '⚡',
+        'IntegrationSpecialist': '🔗'
+    }
+
+    dashboard_items = []
+    for agent, status in agent_statuses.items():
+        icon = agent_icons.get(agent, '🤖')
+        status_class = 'status-success' if '✅' in status else 'status-warning' if '🔄' in status else 'status-indicator'
+
+        dashboard_items.append(f"""
+            <div class="agent-status-item">
+                <div class="agent-icon-large">{icon}</div>
+                <div class="agent-details">
+                    <div class="agent-name">{agent}</div>
+                    <div class="agent-status {status_class}">{status}</div>
+                </div>
+            </div>
+        """)
+
+    return f"""
+        <div class="agent-progress-panel">
+            <div class="dashboard-header">
+                <h3 style="margin: 0 0 15px 0; color: #00bcd4; font-size: 16px; font-weight: 600;">
+                    🤖 Agent Progress Dashboard
+                </h3>
+            </div>
+            <div class="agents-grid">
+                {''.join(dashboard_items)}
+            </div>
+        </div>
+    """
+
+
+# Legacy function for backward compatibility
+async def stream_multiagent_analysis(openapi_spec_content):
+    """Legacy streaming function - now replaced by generator version"""
+    # This is kept for any existing references but should not be used
+    return "❌ This function has been replaced with real-time dashboard updates"
+
+
+def multiagent_analyze_api_with_dashboard(openapi_spec_content):
+    """Gradio wrapper for streaming multi-agent analysis with real-time dashboard updates"""
+    try:
+        # Use the new generator-based streaming function for real-time updates
+        for output, dashboard in stream_multiagent_analysis_with_dashboard(openapi_spec_content):
+            yield output, dashboard
+    except Exception as e:
+        logger.error(f"Multi-agent analysis wrapper error: {str(e)}")
+        yield f"❌ Error running multi-agent analysis: {str(e)}", generate_dashboard_html()
+
+
+# Legacy wrapper for backward compatibility
+def multiagent_analyze_api(openapi_spec_content):
+    """Legacy wrapper - now uses dashboard version"""
+    # Convert generator to single result for compatibility
+    try:
+        final_output = None
+        for output, dashboard in stream_multiagent_analysis_with_dashboard(openapi_spec_content):
+            final_output = output
+        return final_output or "❌ No analysis result generated"
+    except Exception as e:
+        logger.error(f"Multi-agent analysis wrapper error: {str(e)}")
+        return f"❌ Error running multi-agent analysis: {str(e)}"
+
+
+def clear_multiagent_output():
+    """Clear multi-agent analysis output (legacy)"""
+    return ""
 
 
 def chat_with_api(message, history, model_name="gpt-4o-mini"):
@@ -1547,10 +2149,152 @@ def create_complete_interface():
             outputs=[chatbot, msg_input]
         )
 
+        # Tab 4: Multi-Agent Analysis with Streaming - Enhanced Layout
+        with gr.TabItem("🤝 Stage 3: Multi-Agent Analysis", elem_id="multiagent-tab"):
+            # Header section with improved styling
+            gr.HTML("""
+                <div class="analysis-header">
+                    <h2 style="text-align: center; margin-bottom: 1rem; color: var(--neon-accent); text-shadow: 0 0 10px var(--neon-accent);">
+                        🤝 Multi-Agent API Analysis
+                    </h2>
+                    <p style="text-align: center; font-size: 1.1rem; color: #94a3b8; margin-bottom: 2rem;">
+                        Experience specialized AI agents working collaboratively with real-time streaming
+                    </p>
+                </div>
+            """)
+
+            # Action buttons row with better spacing
+            with gr.Row(elem_classes=["action-buttons-row"]):
+                multiagent_analyze_btn = gr.Button(
+                    "🚀 Start Multi-Agent Analysis",
+                    variant="primary",
+                    size="lg",
+                    scale=2,
+                    elem_classes=["primary-action-btn"],
+                    elem_id="start-multiagent-btn"
+                )
+                multiagent_clear_btn = gr.Button(
+                    "🗑️ Clear Results",
+                    variant="secondary",
+                    scale=1,
+                    elem_classes=["secondary-action-btn"]
+                )
+                # Spacer for better balance (scale not supported in Gradio 5.x for HTML)
+
+            # Features showcase with modern styling
+            with gr.Row(elem_classes=["features-showcase"]):
+                gr.HTML("""
+                    <div class="feature-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0;">
+                        <div class="feature-card">
+                            <div class="feature-icon">⚡</div>
+                            <h4>Real-time Updates</h4>
+                            <p>See each agent working live</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">👥</div>
+                            <h4>4 Specialized Agents</h4>
+                            <p>Security, Docs, Performance, Integration</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📊</div>
+                            <h4>Progressive Results</h4>
+                            <p>Analysis chunks as they complete</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📋</div>
+                            <h4>Consolidated Report</h4>
+                            <p>Expert insights combined</p>
+                        </div>
+                    </div>
+                """)
+
+            # Progress indicators with enhanced styling
+            with gr.Row(elem_classes=["progress-section"]):
+                with gr.Column():
+                    gr.HTML("""
+                        <h3 style="color: var(--neon-accent); margin-bottom: 1rem;">
+                            📊 Agent Progress Dashboard
+                        </h3>
+                    """)
+                    agent_status = gr.HTML(
+                        value="""
+                        <div class="agent-progress-panel">
+                            <div class="agent-status-item">
+                                <div class="agent-icon">🔒</div>
+                                <div class="agent-info">
+                                    <strong>SecurityAnalyst</strong>
+                                    <span class="status-indicator" id="sec-status">⏳ Waiting</span>
+                                </div>
+                            </div>
+                            <div class="agent-status-item">
+                                <div class="agent-icon">📝</div>
+                                <div class="agent-info">
+                                    <strong>DocumentationReviewer</strong>
+                                    <span class="status-indicator" id="doc-status">⏳ Waiting</span>
+                                </div>
+                            </div>
+                            <div class="agent-status-item">
+                                <div class="agent-icon">⚡</div>
+                                <div class="agent-info">
+                                    <strong>PerformanceEngineer</strong>
+                                    <span class="status-indicator" id="perf-status">⏳ Waiting</span>
+                                </div>
+                            </div>
+                            <div class="agent-status-item">
+                                <div class="agent-icon">🔗</div>
+                                <div class="agent-info">
+                                    <strong>IntegrationSpecialist</strong>
+                                    <span class="status-indicator" id="int-status">⏳ Waiting</span>
+                                </div>
+                            </div>
+                        </div>
+                        """,
+                        elem_classes=["agent-dashboard"]
+                    )
+
+            # Results section with full width and better styling
+            with gr.Row(elem_classes=["results-section"]):
+                with gr.Column():
+                    gr.HTML("""
+                        <h3 style="color: var(--neon-accent); margin-bottom: 1rem;">
+                            🔄 Real-Time Analysis Stream
+                        </h3>
+                    """)
+                    multiagent_output = gr.Markdown(
+                        value="Click **'Start Multi-Agent Analysis'** to begin collaborative analysis with real-time streaming...",
+                        elem_classes=["analysis-output-panel"],
+                        elem_id="multiagent-results"
+                    )
+
         # RAG Pipeline Study tab event handlers
         run_pipeline_btn.click(fn=run_rag_pipeline_demo, outputs=[pipeline_output])
 
         clear_pipeline_btn.click(fn=clear_pipeline_output, outputs=[pipeline_output])
+
+        # Multi-Agent Analysis tab event handlers
+        def multiagent_analyze_wrapper():
+            """Wrapper to use global current_spec for multi-agent analysis with real-time dashboard"""
+            global current_spec
+            if current_spec:
+                # Use the new generator-based function that yields both outputs
+                for output, dashboard in multiagent_analyze_api_with_dashboard(current_spec):
+                    yield output, dashboard
+            else:
+                yield "❌ Please upload an OpenAPI specification first using the file upload above.", generate_dashboard_html()
+
+        def clear_multiagent_outputs():
+            """Clear both analysis output and dashboard"""
+            return "", generate_dashboard_html()
+
+        multiagent_analyze_btn.click(
+            fn=multiagent_analyze_wrapper,
+            outputs=[multiagent_output, agent_status]
+        )
+
+        multiagent_clear_btn.click(
+            fn=clear_multiagent_outputs,
+            outputs=[multiagent_output, agent_status]
+        )
 
         return app
 
@@ -1572,9 +2316,12 @@ if __name__ == "__main__":
         logger.info("Creating complete interface with both analysis and assistant tabs")
         app = create_complete_interface()
 
+        logger.info("Enabling queue for generator functions")
+        app.queue()
+
         logger.info("Launching Gradio application")
         app.launch(
-            server_name="127.0.0.1", server_port=7860, inbrowser=True, quiet=False
+            server_name="127.0.0.1", server_port=7860, inbrowser=False, quiet=False
         )
     except Exception as e:
         logger.error(f"Failed to launch complete application: {str(e)}")
@@ -1582,3 +2329,41 @@ if __name__ == "__main__":
         raise
     finally:
         logger.info("=== APISage Complete Application Shutdown ===")
+
+
+
+def main():
+    """CLI entry point for the Gradio UI."""
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    logger.info("=== APISage Complete Application Starting ===")
+    logger.info("Application: APISage Complete (Stage 1 + Stage 2)")
+    logger.info("Server: http://127.0.0.1:7860")
+    logger.info("Features: API Analysis & Evaluation + RAG Assistant")
+    logger.info("Backend API: http://localhost:8080")
+    logger.info("Log file: apisage_complete.log")
+
+    print("🚀 Launching APISage Complete Application...")
+    print("🎯 Stage 1: API Analysis & Evaluation")
+    print("🤖 Stage 2: AI Assistant (RAG)")
+    print("📍 Access: http://localhost:7860")
+
+    try:
+        logger.info("Creating complete interface with both analysis and assistant tabs")
+        app = create_complete_interface()
+
+        logger.info("Enabling queue for generator functions")
+        app.queue()
+
+        logger.info("Launching Gradio application")
+        app.launch(
+            server_name="127.0.0.1", server_port=7860, inbrowser=False, quiet=False
+        )
+    except Exception as e:
+        logger.error(f"Failed to launch complete application: {str(e)}")
+        print(f"❌ Error launching application: {str(e)}")
+        raise
+    finally:
+        logger.info("=== APISage Complete Application Shutdown ===")
+

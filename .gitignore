@@ -56,6 +56,7 @@ Thumbs.db
 *.log
 logs/
 log/
+apisage_complete.log
 
 # Database
 *.db
@@ -95,5 +96,5 @@ test_api_spec.json
 # Node modules (if any)
 node_modules/
 
-# Poetry
-poetry.lock
+# Poetry - DO NOT ignore poetry.lock (it should be tracked)
+# poetry.lock

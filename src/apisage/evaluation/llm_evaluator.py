@@ -11,7 +11,7 @@ from enum import Enum
 import structlog
 import time
 
-from infrastructure.llm_manager import SimpleLLMManager, LLMRequest
+from apisage.core.llm_manager import SimpleLLMManager, LLMRequest
 
 logger = structlog.get_logger()
 

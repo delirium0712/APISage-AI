@@ -13,9 +13,9 @@ APISage is an AI-powered OpenAPI 3.0 specification analyzer that provides compre
 ### Starting the Application
 
 ```bash
-# Full application startup (both backend and UI)
-poetry run python -m api.main  # Start backend API on port 8080
-poetry run python gradio_app.py  # Start Gradio UI on port 7860
+# Standard application startup
+poetry run python -m src.apisage.api.main  # Start backend API on port 8080
+poetry run python apps/gradio_app.py  # Start Gradio UI on port 7860
 ```
 
 ### Testing
@@ -58,23 +58,21 @@ poetry run flake8 .
 
 ### Core Components
 
-1. **Backend API** (`/api/main.py`)
+1. **Backend API** (`src/apisage/api/main.py`)
    - FastAPI application with multiple analysis endpoints
    - Key endpoints:
      - `/analyze` - Comprehensive API analysis using LLM
      - `/analyze-agentic` - Multi-agent collaborative analysis
      - `/analyze-with-evaluation` - Analysis with quality scoring
-     - `/rag-query` - RAG endpoint for conversational Q&A (added at line 795)
+     - `/rag-query` - RAG endpoint for conversational Q&A
    - Uses SimpleLLMManager with o1-mini model for reasoning tasks
 
 2. **Enhanced RAG System Architecture**
-   - **Hybrid RAG approach**: Both context-injection and vector-based retrieval
-   - **Vector RAG**: ChromaDB with BGE-M3 embeddings for semantic search
-   - **DeepEval Integration**: RAG Triad evaluation (Answer Relevancy, Faithfulness, Contextual Relevancy)
+   - **Contextual Retrieval**: Anthropic's contextual retrieval system
+   - **Hybrid Search**: Combines semantic and keyword search
    - **Performance Monitoring**: Real-time metrics tracking and alerting
-   - `/rag-query-v2` endpoint with enhanced evaluation capabilities
 
-3. **Multi-Agent System** (`/infrastructure/agentic_orchestrator.py`)
+3. **Multi-Agent System** (`src/apisage/core/agentic_orchestrator.py`)
    - Specialized agents for different analysis aspects:
      - Security Analyst
      - Documentation Reviewer
@@ -82,18 +80,17 @@ poetry run flake8 .
      - Integration Specialist
    - Agents collaborate to provide comprehensive analysis
 
-4. **Gradio UI** (`/gradio_app.py`)
+4. **Gradio UI** (`apps/gradio_app.py`)
    - Five main analysis tabs:
      - Comprehensive Analysis
      - Multi-Agent Analysis
      - Evaluated Analysis
      - RAG Query Interface
-   - AI Assistant (DeepEval-enhanced RAG)
+   - AI Assistant with RAG capabilities
    - Enhanced dark theme with visual elements
    - Real-time integration with backend APIs
-   - DeepEval metrics display in responses
 
-5. **LLM Manager** (`/infrastructure/llm_manager.py`)
+5. **LLM Manager** (`src/apisage/core/llm_manager.py`)
    - Handles OpenAI API integration
    - Model configuration for GPT-4o, o1-mini, etc.
    - Manages temperature settings (o1 models don't support temperature)
@@ -101,14 +98,13 @@ poetry run flake8 .
 
 ### Key File Locations
 
-- **API Models**: Inline in `/api/main.py` (lines 67-128)
-- **RAG Implementation**: `/api/main.py` (multiple endpoints)
-- **Vector RAG**: `/infrastructure/vector_rag.py`
-- **DeepEval Integration**: `/infrastructure/deepeval_enhanced.py`
-- **Performance Monitor**: `/infrastructure/performance_monitor.py`
-- **UI Application**: `/gradio_app.py`
-- **Agent Orchestration**: `/infrastructure/agentic_orchestrator.py`
-- **Configuration**: `/config/settings.py` and `.env`
+- **API Models**: Inline in `src/apisage/api/main.py` (lines 67-128)
+- **RAG Implementation**: `src/apisage/api/main.py` (multiple endpoints)
+- **Contextual Retrieval**: `src/apisage/core/contextual_retrieval.py`
+- **Performance Monitor**: `src/apisage/core/performance_monitor.py`
+- **UI Application**: `apps/gradio_app.py`
+- **Agent Orchestration**: `src/apisage/core/agentic_orchestrator.py`
+- **Configuration**: `src/apisage/config/settings.py` and `.env`
 
 ## Configuration
 
@@ -150,10 +146,10 @@ Change in respective startup commands if needed.
 
 ### Adding New Features
 
-1. **New API Endpoint**: Add to `/api/main.py` following existing patterns
-2. **New Agent**: Create in `/infrastructure/` extending base classes
-3. **UI Enhancement**: Modify `/gradio_app.py` with Gradio components
-4. **New Analysis Type**: Extend evaluation system in `/evaluation/`
+1. **New API Endpoint**: Add to `src/apisage/api/main.py` following existing patterns
+2. **New Agent**: Create in `src/apisage/core/` extending base classes
+3. **UI Enhancement**: Modify `apps/gradio_app.py` with Gradio components
+4. **New Analysis Type**: Extend evaluation system in `src/apisage/evaluation/`
 
 ### Testing Changes
 
@@ -198,3 +194,29 @@ Change in respective startup commands if needed.
 - BGE-M3 multilingual embeddings
 - Hybrid search with keyword + semantic
 - Semantic caching for improved performance
+
+### Performance Optimization Framework (NEW)
+- **OpenTelemetry Integration**: Distributed tracing and metrics collection
+- **Multi-Tier Caching**: L1 (memory), L2 (compressed), Semantic similarity caching
+- **Request Batching**: Intelligent batching of similar requests to reduce API calls
+- **Connection Pooling**: Efficient resource management for external services
+- **Real-time Dashboard**: Live performance monitoring and bottleneck analysis
+- **Automatic Instrumentation**: Step-by-step timing for the entire request lifecycle
+- **Optimization Recommendations**: AI-powered suggestions for performance improvements
+
+## Performance Optimization
+
+The backend includes built-in performance monitoring features:
+- Comprehensive performance monitoring with OpenTelemetry
+- Multi-tier caching system with LZ4 compression
+- Real-time bottleneck detection and alerting
+
+### Key Optimizations Implemented
+1. **Caching Strategy**:
+   - Semantic caching for similar queries
+   - In-memory caching for frequently accessed data
+
+2. **Monitoring & Alerting**:
+   - Step-by-step timing instrumentation
+   - Performance threshold alerts
+   - Bottleneck analysis with recommendations

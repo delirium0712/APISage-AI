@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock
 import os
 
-from infrastructure.llm_manager import (
+from apisage.core.llm_manager import (
     SimpleLLMManager,
     LLMRequest,
     LLMResponse,

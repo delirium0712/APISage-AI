@@ -27,29 +27,3 @@ services:
       start_period: 40s
     networks:
       - apisage-network
-
-  # Optional: Nginx reverse proxy (use with: docker-compose --profile production up)
-  nginx:
-    image: nginx:alpine
-    container_name: apisage-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - apisage
-    restart: unless-stopped
-    networks:
-      - apisage-network
-    profiles:
-      - production
-
-networks:
-  apisage-network:
-    driver: bridge
-
-volumes:
-  logs:
-    driver: local
